@@ -19,8 +19,8 @@ use regex::Regex;
 
 #[derive(Debug)]
 pub enum Block {
-    Start(),
-    End(),
+    Start,
+    End,
 }
 
 #[derive(Debug)]
@@ -41,9 +41,9 @@ fn gen_regex() -> Regex {
     inital.push_str(")");
 
     let mut subsequent = "(?:[0-9]|".to_string();
-    subsequent.push_str(&inital); 
-    subsequent.push_str("|"); 
-    subsequent.push_str(special_subsequent); 
+    subsequent.push_str(&inital);
+    subsequent.push_str("|");
+    subsequent.push_str(special_subsequent);
     subsequent.push_str(")");
 
     let mut normal_symbol = "(?:".to_string();
@@ -61,14 +61,7 @@ fn gen_regex() -> Regex {
 
     let number = "(?P<number>[0-9]+)";
 
-    let open_block = r#"(?P<openBlock>\()"#;
-    let close_block = r#"(?P<closeBlock>\))"#;
-
-    let mut block = "(?P<block>".to_string();
-    block.push_str(&open_block); 
-    block.push_str("|");
-    block.push_str(&close_block);
-    block.push_str(")");
+    let block = r#"(?P<block>\(|\))"#;
 
     let whitespace = r#"(?P<whiteSpace>[[:space:]]+)"#;
 
@@ -79,7 +72,7 @@ fn gen_regex() -> Regex {
     regex_str.push_str("|");
     regex_str.push_str(&symbol);
     regex_str.push_str("|");
-    regex_str.push_str(&block);
+    regex_str.push_str(block);
     regex_str.push_str("|");
     regex_str.push_str(whitespace);
     regex_str.push_str(")");
@@ -130,14 +123,15 @@ impl<'a> Tokenizer<'a> {
             Some(Token::Number(number.as_str()))
         } else if let Some(string) = captures.name("string") {
             Some(Token::TString(string.as_str()))
-        } else if captures.name("block").is_some() {
-            if captures.name("openBlock").is_some() {
-                Some(Token::Block(Block::Start()))
-            } else if captures.name("closeBlock").is_some() {
-                Some(Token::Block(Block::End()))
+        } else if let Some(block) = captures.name("block") {
+            let block_char = block.as_str();
+            Some(if block_char == "(" {
+                Token::Block(Block::Start)
+            } else if block_char == ")" {
+                Token::Block(Block::End)
             } else {
                 unreachable!()
-            }
+            })
         } else {
             unreachable!()
         };
