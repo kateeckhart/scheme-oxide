@@ -1,4 +1,6 @@
 /*
+    Copyright 2018 Alexander Eckhart
+
     This file is part of scheme-oxide.
 
     Scheme-oxide is free software: you can redistribute it and/or modify
