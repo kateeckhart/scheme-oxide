@@ -72,7 +72,7 @@ fn gen_regex() -> Regex {
 
     let whitespace = r#"(?P<whiteSpace>[[:space:]]+)"#;
 
-    let mut regex_str = "^".to_string();
+    let mut regex_str = "^(?:".to_string();
     regex_str.push_str(number);
     regex_str.push_str("|");
     regex_str.push_str(string);
@@ -82,6 +82,7 @@ fn gen_regex() -> Regex {
     regex_str.push_str(&block);
     regex_str.push_str("|");
     regex_str.push_str(whitespace);
+    regex_str.push_str(")");
 
     Regex::new(&regex_str).unwrap()
 }
