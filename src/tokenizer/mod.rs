@@ -113,9 +113,7 @@ impl<'a> Tokenizer<'a> {
             return Err(EofOrErr::Error);
         };
 
-        let ret;
-
-        ret = if captures.name("whiteSpace").is_some() {
+        let ret = if captures.name("whiteSpace").is_some() {
             None
         } else {
             Some(if let Some(id) = captures.name("symbol") {
