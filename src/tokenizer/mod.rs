@@ -117,23 +117,25 @@ impl<'a> Tokenizer<'a> {
 
         ret = if captures.name("whiteSpace").is_some() {
             None
-        } else if let Some(id) = captures.name("symbol") {
-            Some(Token::Symbol(id.as_str()))
-        } else if let Some(number) = captures.name("number") {
-            Some(Token::Number(number.as_str()))
-        } else if let Some(string) = captures.name("string") {
-            Some(Token::TString(string.as_str()))
-        } else if let Some(block) = captures.name("block") {
-            let block_char = block.as_str();
-            Some(if block_char == "(" {
-                Token::Block(Block::Start)
-            } else if block_char == ")" {
-                Token::Block(Block::End)
+        } else {
+            Some(if let Some(id) = captures.name("symbol") {
+                Token::Symbol(id.as_str())
+            } else if let Some(number) = captures.name("number") {
+                Token::Number(number.as_str())
+            } else if let Some(string) = captures.name("string") {
+                Token::TString(string.as_str())
+            } else if let Some(block) = captures.name("block") {
+                let block_char = block.as_str();
+                if block_char == "(" {
+                    Token::Block(Block::Start)
+                } else if block_char == ")" {
+                    Token::Block(Block::End)
+                } else {
+                    unreachable!()
+                }
             } else {
                 unreachable!()
             })
-        } else {
-            unreachable!()
         };
 
         // Advance the position by the amount matched
