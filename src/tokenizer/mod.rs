@@ -34,7 +34,7 @@ pub enum Token<'a> {
 fn gen_regex() -> Regex {
     let special_inital = "[!$%&*/:<=>?^_~]";
     let odd_identifier = r#"(?:[+-]|\.{3})"#;
-    let special_subsequent = "[+-.@]";
+    let special_subsequent = r#"[+.@-]"#;
 
     let mut inital = "(?:[[:alpha:]]|".to_string();
     inital.push_str(&special_inital);
