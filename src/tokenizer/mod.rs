@@ -27,13 +27,13 @@ pub enum Block {
 pub enum Token<'a> {
     Block(Block),
     TString(&'a str),
-    Identifier(&'a str),
+    Symbol(&'a str),
     Number(&'a str),
 }
 
 fn gen_regex() -> Regex {
     let special_inital = "[!$%&*/:<=>?^_~]";
-    let odd_identifier = r#"(?:[+-]|\.{3})"#;
+    let odd_symbol = r#"(?:[+-]|\.{3})"#;
     let special_subsequent = r#"[+.@-]"#;
 
     let mut inital = "(?:[[:alpha:]]|".to_string();
@@ -46,16 +46,16 @@ fn gen_regex() -> Regex {
     subsequent.push_str(special_subsequent); 
     subsequent.push_str(")");
 
-    let mut normal_identifier = "(?:".to_string();
-    normal_identifier.push_str(&inital);
-    normal_identifier.push_str(&subsequent); 
-    normal_identifier.push_str("*)");
+    let mut normal_symbol = "(?:".to_string();
+    normal_symbol.push_str(&inital);
+    normal_symbol.push_str(&subsequent);
+    normal_symbol.push_str("*)");
 
-    let mut identifier = "(?P<identifier>".to_string(); 
-    identifier.push_str(&normal_identifier);
-    identifier.push_str("|");
-    identifier.push_str(&odd_identifier);
-    identifier.push_str(")");
+    let mut symbol = "(?P<symbol>".to_string();
+    symbol.push_str(&normal_symbol);
+    symbol.push_str("|");
+    symbol.push_str(&odd_symbol);
+    symbol.push_str(")");
 
     let string = r#"(?:"(?P<string>(?:[^"\\\n]|\\.)*)")"#;
 
@@ -77,7 +77,7 @@ fn gen_regex() -> Regex {
     regex_str.push_str("|");
     regex_str.push_str(string);
     regex_str.push_str("|");
-    regex_str.push_str(&identifier);
+    regex_str.push_str(&symbol);
     regex_str.push_str("|");
     regex_str.push_str(&block);
     regex_str.push_str("|");
@@ -124,8 +124,8 @@ impl<'a> Tokenizer<'a> {
 
         ret = if captures.name("whiteSpace").is_some() {
             None
-        } else if let Some(id) = captures.name("identifier") {
-            Some(Token::Identifier(id.as_str()))
+        } else if let Some(id) = captures.name("symbol") {
+            Some(Token::Symbol(id.as_str()))
         } else if let Some(number) = captures.name("number") {
             Some(Token::Number(number.as_str()))
         } else if let Some(string) = captures.name("string") {
