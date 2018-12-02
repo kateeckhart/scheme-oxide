@@ -81,7 +81,7 @@ fn gen_regex() -> Regex {
 }
 
 lazy_static! {
-    pub static ref REGEX: Regex = gen_regex();
+    static ref REGEX: Regex = gen_regex();
 }
 
 pub struct Tokenizer<'a> {
