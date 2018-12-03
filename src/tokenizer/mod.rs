@@ -103,10 +103,6 @@ impl<'a> TokenOrWhitespace<'a> {
         }
     }
 
-    fn is_token(&self) -> bool {
-        !self.is_whitespace()
-    }
-
     fn to_option(self) -> Option<Token<'a>> {
         match self {
             TokenOrWhitespace::Token(token) => Some(token),
