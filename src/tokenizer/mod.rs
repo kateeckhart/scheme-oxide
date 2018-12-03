@@ -65,7 +65,7 @@ fn gen_regex() -> Regex {
 
     let block = r#"(?P<block>\(|\))"#;
 
-    let whitespace = r#"(?P<whiteSpace>[[:space:]]+)"#;
+    let whitespace = r#"(?P<whitespace>[[:space:]]+)"#;
 
     let mut regex_str = "^(?:".to_string();
     regex_str.push_str(number);
@@ -90,11 +90,37 @@ pub struct Tokenizer<'a> {
     current_possition: &'a str,
 }
 
-#[derive(Eq, PartialEq)]
-enum EofOrErr {
-    EndOfFile,
-    Error,
+enum TokenOrWhitespace<'a> {
+    Token(Token<'a>),
+    Whitespace,
 }
+
+impl<'a> TokenOrWhitespace<'a> {
+    fn is_whitespace(&self) -> bool {
+        match self {
+            TokenOrWhitespace::Token(_) => false,
+            TokenOrWhitespace::Whitespace => true,
+        }
+    }
+
+    fn is_token(&self) -> bool {
+        !self.is_whitespace()
+    }
+
+    fn to_option(self) -> Option<Token<'a>> {
+        match self {
+            TokenOrWhitespace::Token(token) => Some(token),
+            TokenOrWhitespace::Whitespace => None,
+        }
+    }
+
+    fn unwrap(self) -> Token<'a> {
+        self.to_option().unwrap()
+    }
+}
+
+#[derive(Debug)]
+pub struct TokenizerError;
 
 impl<'a> Tokenizer<'a> {
     pub fn new(token_stream: &'a str) -> Tokenizer<'a> {
@@ -103,22 +129,22 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn gen_token(&mut self) -> Result<Option<Token<'a>>, EofOrErr> {
+    fn gen_token(&mut self) -> Option<Result<TokenOrWhitespace<'a>, TokenizerError>> {
         if self.current_possition.is_empty() {
-            return Err(EofOrErr::EndOfFile);
+            return None;
         }
 
         let unchecked_captures = REGEX.captures(self.current_possition);
         let captures = if let Some(cap) = unchecked_captures {
             cap
         } else {
-            return Err(EofOrErr::Error);
+            return Some(Err(TokenizerError));
         };
 
-        let ret = if captures.name("whiteSpace").is_some() {
-            None
+        let ret = if captures.name("whitespace").is_some() {
+            TokenOrWhitespace::Whitespace
         } else {
-            Some(if let Some(id) = captures.name("symbol") {
+            TokenOrWhitespace::Token(if let Some(id) = captures.name("symbol") {
                 Token::Symbol(id.as_str())
             } else if let Some(number) = captures.name("number") {
                 Token::Number(number.as_str())
@@ -143,33 +169,33 @@ impl<'a> Tokenizer<'a> {
 
         self.current_possition = self.current_possition.split_at(end_of_token).1;
 
-        Ok(ret)
+        Some(Ok(ret))
     }
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
-    type Item = Result<Token<'a>, ()>;
+    type Item = Result<Token<'a>, TokenizerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut unchecked_token = self.gen_token();
-        let token;
-        loop {
-            if let Ok(tok) = unchecked_token {
-                if tok.is_some() {
-                    token = tok.unwrap();
-                    break;
+        // Grab another token if its whitespace
+        let mut token = self.gen_token();
+        let mut is_whitespace = true;
+        while is_whitespace {
+            if let Some(token_or_err) = token {
+                if let Ok(tok) = token_or_err {
+                    if tok.is_whitespace() {
+                        token = self.gen_token();
+                        continue;
+                    } else {
+                        token = Some(Ok(tok));
+                    }
                 } else {
-                    unchecked_token = self.gen_token()
-                }
-            } else if let Err(err) = unchecked_token {
-                if err == EofOrErr::EndOfFile {
-                    return None;
-                } else {
-                    return Some(Err(()));
+                    token = Some(token_or_err);
                 }
             }
+            is_whitespace = false;
         }
 
-        Some(Ok(token))
+        token.map(|toke| toke.map(|tok| tok.unwrap()))
     }
 }
