@@ -36,17 +36,21 @@ pub enum Token<'a> {
 fn gen_regex() -> Regex {
     let special_inital = "[!$%&*/:<=>?^_~]";
     let odd_symbol = r"(?:[+-]|\.{3})";
+    let whitespace = "(?:[[:space:]])";
+    let delimer = format!(r#"(?:{}|[()";]|$)"#, whitespace);
     let special_subsequent = r"[+.@-]";
     let inital = format!("(?:[[:alpha:]]|{})", special_inital);
     let subsequent = format!("(?:[0-9]|{}|{})", inital, special_subsequent);
     let normal_symbol = format!("(?:{}{}*)", inital, subsequent);
-    let symbol = format!("(?P<symbol>{}|{})", normal_symbol, odd_symbol);
+    let symbol = format!(
+        "(?:(?P<symbol>{}|{}){})",
+        normal_symbol, odd_symbol, delimer
+    );
     let string = r#"(?:"(?P<string>(?:[^"\\\n]|\\.)*)")"#;
-    let number = "(?P<number>[0-9]+)";
+    let number = format!("(?:(?P<number>[0-9]+){})", delimer);
     let block = r"(?P<block>\(|\))";
-    let whitespace = "(?P<whitespace>[[:space:]]+)";
     let regex_str = format!(
-        "^(?:{}|{}|{}|{}|{})",
+        "^(?:{}|{}|{}|{}|(?P<whitespace>{}+))",
         number, string, symbol, block, whitespace
     );
 
@@ -148,12 +152,16 @@ impl<'a> Tokenizer<'a> {
             return Err(TokenizerError::unknown_token());
         };
 
+        let mut end_of_token = captures.get(0).unwrap().end();
+
         let ret = if captures.name("whitespace").is_some() {
             InternalToken::Whitespace
         } else {
             InternalToken::PublicToken(if let Some(id) = captures.name("symbol") {
+                end_of_token = id.end();
                 Token::Symbol(id.as_str())
             } else if let Some(number) = captures.name("number") {
+                end_of_token = number.end();
                 Token::Number(number.as_str())
             } else if let Some(string) = captures.name("string") {
                 Token::TString(string.as_str())
@@ -171,10 +179,7 @@ impl<'a> Tokenizer<'a> {
             })
         };
 
-        // Advance the position by the amount matched
-        let end_of_token = captures.get(0).unwrap().end();
-
-        self.current_possition = self.current_possition.split_at(end_of_token).1;
+        self.current_possition = &self.current_possition[end_of_token..];
 
         Ok(ret)
     }

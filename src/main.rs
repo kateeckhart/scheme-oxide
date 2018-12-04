@@ -25,7 +25,7 @@ mod tokenizer;
 use tokenizer::Tokenizer;
 
 fn main() {
-    let token_stream = r#""testing" "\"" ((())) 875467 alex i+ i9 """#;
+    let token_stream = r#""testing" "\""((()))875467 alex i+ i9 "" + ..."#;
     for token in Tokenizer::new(token_stream) {
         println!("{:?}", token.unwrap())
     }
