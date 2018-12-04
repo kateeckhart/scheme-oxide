@@ -35,49 +35,20 @@ pub enum Token<'a> {
 
 fn gen_regex() -> Regex {
     let special_inital = "[!$%&*/:<=>?^_~]";
-    let odd_symbol = r#"(?:[+-]|\.{3})"#;
-    let special_subsequent = r#"[+.@-]"#;
-
-    let mut inital = "(?:[[:alpha:]]|".to_string();
-    inital.push_str(&special_inital);
-    inital.push_str(")");
-
-    let mut subsequent = "(?:[0-9]|".to_string();
-    subsequent.push_str(&inital);
-    subsequent.push_str("|");
-    subsequent.push_str(special_subsequent);
-    subsequent.push_str(")");
-
-    let mut normal_symbol = "(?:".to_string();
-    normal_symbol.push_str(&inital);
-    normal_symbol.push_str(&subsequent);
-    normal_symbol.push_str("*)");
-
-    let mut symbol = "(?P<symbol>".to_string();
-    symbol.push_str(&normal_symbol);
-    symbol.push_str("|");
-    symbol.push_str(&odd_symbol);
-    symbol.push_str(")");
-
+    let odd_symbol = r"(?:[+-]|\.{3})";
+    let special_subsequent = r"[+.@-]";
+    let inital = format!("(?:[[:alpha:]]|{})", special_inital);
+    let subsequent = format!("(?:[0-9]|{}|{})", inital, special_subsequent);
+    let normal_symbol = format!("(?:{}{}*)", inital, subsequent);
+    let symbol = format!("(?P<symbol>{}|{})", normal_symbol, odd_symbol);
     let string = r#"(?:"(?P<string>(?:[^"\\\n]|\\.)*)")"#;
-
     let number = "(?P<number>[0-9]+)";
-
-    let block = r#"(?P<block>\(|\))"#;
-
-    let whitespace = r#"(?P<whitespace>[[:space:]]+)"#;
-
-    let mut regex_str = "^(?:".to_string();
-    regex_str.push_str(number);
-    regex_str.push_str("|");
-    regex_str.push_str(string);
-    regex_str.push_str("|");
-    regex_str.push_str(&symbol);
-    regex_str.push_str("|");
-    regex_str.push_str(block);
-    regex_str.push_str("|");
-    regex_str.push_str(whitespace);
-    regex_str.push_str(")");
+    let block = r"(?P<block>\(|\))";
+    let whitespace = "(?P<whitespace>[[:space:]]+)";
+    let regex_str = format!(
+        "^(?:{}|{}|{}|{}|{})",
+        number, string, symbol, block, whitespace
+    );
 
     Regex::new(&regex_str).unwrap()
 }
