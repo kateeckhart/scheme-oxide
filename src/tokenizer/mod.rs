@@ -61,23 +61,33 @@ pub struct Tokenizer<'a> {
     current_possition: &'a str,
 }
 
-enum TokenOrWhitespace<'a> {
-    Token(Token<'a>),
+enum InternalToken<'a> {
+    PublicToken(Token<'a>),
     Whitespace,
+    EndOfFile,
 }
 
-impl<'a> TokenOrWhitespace<'a> {
-    fn is_whitespace(&self) -> bool {
+impl<'a> InternalToken<'a> {
+    fn can_ignore(&self) -> bool {
         match self {
-            TokenOrWhitespace::Token(_) => false,
-            TokenOrWhitespace::Whitespace => true,
+            InternalToken::PublicToken(_) => false,
+            InternalToken::EndOfFile => false,
+            InternalToken::Whitespace => true,
+        }
+    }
+
+    fn is_end_of_file(&self) -> bool {
+        if let InternalToken::EndOfFile = self {
+            true
+        } else {
+            false
         }
     }
 
     fn to_option(self) -> Option<Token<'a>> {
         match self {
-            TokenOrWhitespace::Token(token) => Some(token),
-            TokenOrWhitespace::Whitespace => None,
+            InternalToken::PublicToken(token) => Some(token),
+            _ => None,
         }
     }
 
@@ -86,8 +96,38 @@ impl<'a> TokenOrWhitespace<'a> {
     }
 }
 
+trait ResultExt {
+    fn is_end_of_file(&self) -> bool;
+}
+
+impl<'a, T> ResultExt for Result<InternalToken<'a>, T> {
+    fn is_end_of_file(&self) -> bool {
+        if let Ok(token) = self {
+            token.is_end_of_file()
+        } else {
+            false
+        }
+    }
+}
+
 #[derive(Debug)]
-pub struct TokenizerError;
+pub enum ErrorType {
+    UnexpectedEndOfFile,
+    UnknownToken,
+}
+
+#[derive(Debug)]
+pub struct TokenizerError {
+    e_type: ErrorType,
+}
+
+impl TokenizerError {
+    fn unknown_token() -> Self {
+        TokenizerError {
+            e_type: ErrorType::UnknownToken,
+        }
+    }
+}
 
 impl<'a> Tokenizer<'a> {
     pub fn new(token_stream: &'a str) -> Tokenizer<'a> {
@@ -96,22 +136,22 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    fn gen_token(&mut self) -> Option<Result<TokenOrWhitespace<'a>, TokenizerError>> {
+    fn gen_token(&mut self) -> Result<InternalToken<'a>, TokenizerError> {
         if self.current_possition.is_empty() {
-            return None;
+            return Ok(InternalToken::EndOfFile);
         }
 
         let unchecked_captures = REGEX.captures(self.current_possition);
         let captures = if let Some(cap) = unchecked_captures {
             cap
         } else {
-            return Some(Err(TokenizerError));
+            return Err(TokenizerError::unknown_token());
         };
 
         let ret = if captures.name("whitespace").is_some() {
-            TokenOrWhitespace::Whitespace
+            InternalToken::Whitespace
         } else {
-            TokenOrWhitespace::Token(if let Some(id) = captures.name("symbol") {
+            InternalToken::PublicToken(if let Some(id) = captures.name("symbol") {
                 Token::Symbol(id.as_str())
             } else if let Some(number) = captures.name("number") {
                 Token::Number(number.as_str())
@@ -136,7 +176,7 @@ impl<'a> Tokenizer<'a> {
 
         self.current_possition = self.current_possition.split_at(end_of_token).1;
 
-        Some(Ok(ret))
+        Ok(ret)
     }
 }
 
@@ -146,23 +186,23 @@ impl<'a> Iterator for Tokenizer<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         // Grab another token if its whitespace
         let mut token = self.gen_token();
-        let mut is_whitespace = true;
-        while is_whitespace {
-            if let Some(token_or_err) = token {
-                if let Ok(tok) = token_or_err {
-                    if tok.is_whitespace() {
-                        token = self.gen_token();
-                        continue;
-                    } else {
-                        token = Some(Ok(tok));
-                    }
+        let mut can_ignore = true;
+        while can_ignore {
+            if let Ok(tok) = token {
+                if tok.can_ignore() {
+                    token = self.gen_token();
+                    continue;
                 } else {
-                    token = Some(token_or_err);
+                    token = Ok(tok);
                 }
             }
-            is_whitespace = false;
+            can_ignore = false;
         }
 
-        token.map(|toke| toke.map(|tok| tok.unwrap()))
+        if token.is_end_of_file() {
+            None
+        } else {
+            Some(token.map(|toke| toke.unwrap()))
+        }
     }
 }
