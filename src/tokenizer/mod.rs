@@ -37,17 +37,19 @@ fn gen_regex() -> Regex {
     let special_inital = "[!$%&*/:<=>?^_~]";
     let odd_symbol = r"(?:[+-]|\.{3})";
     let whitespace = "(?:[[:space:]])";
-    let delimer = format!(r#"(?:{}|[()";]|$)"#, whitespace);
+    let delimer = |id| format!(r#"(?:{}|[()";]|(?P<{}EndOfFile>$))"#, whitespace, id);
     let special_subsequent = r"[+.@-]";
     let inital = format!("(?:[[:alpha:]]|{})", special_inital);
     let subsequent = format!("(?:[0-9]|{}|{})", inital, special_subsequent);
     let normal_symbol = format!("(?:{}{}*)", inital, subsequent);
     let symbol = format!(
         "(?:(?P<symbol>{}|{}){})",
-        normal_symbol, odd_symbol, delimer
+        normal_symbol,
+        odd_symbol,
+        delimer("symbol")
     );
     let string = r#"(?:"(?P<string>(?:[^"\\\n]|\\.)*)")"#;
-    let number = format!("(?:(?P<number>[0-9]+){})", delimer);
+    let number = format!("(?:(?P<number>[0-9]+){})", delimer("number"));
     let block = r"(?P<block>\(|\))";
     let regex_str = format!(
         "^(?:{}|{}|{}|{}|(?P<whitespace>{}+))",
@@ -61,27 +63,23 @@ lazy_static! {
     static ref REGEX: Regex = gen_regex();
 }
 
-pub struct Tokenizer<'a> {
-    current_possition: &'a str,
-}
-
 enum InternalToken<'a> {
     PublicToken(Token<'a>),
     Whitespace,
-    EndOfFile,
+    EndOfFile(Option<Token<'a>>),
 }
 
 impl<'a> InternalToken<'a> {
     fn can_ignore(&self) -> bool {
         match self {
             InternalToken::PublicToken(_) => false,
-            InternalToken::EndOfFile => false,
+            InternalToken::EndOfFile(_) => false,
             InternalToken::Whitespace => true,
         }
     }
 
     fn is_end_of_file(&self) -> bool {
-        if let InternalToken::EndOfFile = self {
+        if let InternalToken::EndOfFile(_) = self {
             true
         } else {
             false
@@ -133,6 +131,10 @@ impl TokenizerError {
     }
 }
 
+pub struct Tokenizer<'a> {
+    current_possition: &'a str,
+}
+
 impl<'a> Tokenizer<'a> {
     pub fn new(token_stream: &'a str) -> Tokenizer<'a> {
         Tokenizer {
@@ -141,8 +143,31 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn gen_token(&mut self) -> Result<InternalToken<'a>, TokenizerError> {
+        fn handle_symbol_number<'a, T>(
+            id: &'static str,
+            captures: &regex::Captures<'a>,
+            constructor: T,
+        ) -> Option<(usize, InternalToken<'a>)>
+        where
+            T: Fn(&'a str) -> Token<'a>,
+        {
+            if let Some(token) = captures.name(id) {
+                let ret = constructor(token.as_str());
+                Some((
+                    token.end(),
+                    if captures.name(&format!("{}EndOfFile", id)).is_some() {
+                        InternalToken::EndOfFile(Some(ret))
+                    } else {
+                        InternalToken::PublicToken(ret)
+                    },
+                ))
+            } else {
+                None
+            }
+        }
+
         if self.current_possition.is_empty() {
-            return Ok(InternalToken::EndOfFile);
+            return Ok(InternalToken::EndOfFile(None));
         }
 
         let unchecked_captures = REGEX.captures(self.current_possition);
@@ -156,14 +181,18 @@ impl<'a> Tokenizer<'a> {
 
         let ret = if captures.name("whitespace").is_some() {
             InternalToken::Whitespace
+        } else if let Some(r) =
+            handle_symbol_number("symbol", &captures, |token| Token::Symbol(token))
+        {
+            end_of_token = r.0;
+            r.1
+        } else if let Some(r) =
+            handle_symbol_number("number", &captures, |token| Token::Number(token))
+        {
+            end_of_token = r.0;
+            r.1
         } else {
-            InternalToken::PublicToken(if let Some(id) = captures.name("symbol") {
-                end_of_token = id.end();
-                Token::Symbol(id.as_str())
-            } else if let Some(number) = captures.name("number") {
-                end_of_token = number.end();
-                Token::Number(number.as_str())
-            } else if let Some(string) = captures.name("string") {
+            InternalToken::PublicToken(if let Some(string) = captures.name("string") {
                 Token::TString(string.as_str())
             } else if let Some(block) = captures.name("block") {
                 let block_char = block.as_str();
@@ -205,7 +234,11 @@ impl<'a> Iterator for Tokenizer<'a> {
         }
 
         if token.is_end_of_file() {
-            None
+            if let Ok(InternalToken::EndOfFile(ret)) = token {
+                ret.map(|inside| Ok(inside))
+            } else {
+                panic!()
+            }
         } else {
             Some(token.map(|toke| toke.unwrap()))
         }
