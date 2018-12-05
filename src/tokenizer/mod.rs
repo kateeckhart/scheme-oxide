@@ -18,6 +18,7 @@
 */
 
 use regex::Regex;
+use std::io::{self, prelude::*};
 
 #[derive(Debug)]
 pub enum Block {
@@ -113,36 +114,73 @@ impl<'a, T> ResultExt for Result<InternalToken<'a>, T> {
 }
 
 #[derive(Debug)]
-pub enum ErrorType {
+pub enum TokenizerError {
+    TokenTooBig,
+    IoError(io::Error),
+    Utf8Error,
     UnexpectedEndOfFile,
     UnknownToken,
 }
 
-#[derive(Debug)]
-pub struct TokenizerError {
-    e_type: ErrorType,
-}
-
-impl TokenizerError {
-    fn unknown_token() -> Self {
-        TokenizerError {
-            e_type: ErrorType::UnknownToken,
-        }
+impl From<io::Error> for TokenizerError {
+    fn from(err: io::Error) -> Self {
+        TokenizerError::IoError(err)
     }
 }
 
-pub struct Tokenizer<'a> {
-    current_possition: &'a str,
+pub struct Tokenizer<F> where F: Read {
+    buffer: Vec<u8>,
+    start: usize,
+    last_codepoint: usize,
+    end: usize,
+    file: F,
 }
 
-impl<'a> Tokenizer<'a> {
-    pub fn new(token_stream: &'a str) -> Tokenizer<'a> {
+impl<F> Tokenizer<F> where F: Read {
+    pub fn new(file: F) -> Self {
         Tokenizer {
-            current_possition: token_stream,
+            buffer: vec![0; 1024*16],
+            start: 0,
+            last_codepoint: 0,
+            end: 0,
+            file,
         }
     }
 
-    fn gen_token(&mut self) -> Result<InternalToken<'a>, TokenizerError> {
+    // True if end of file
+    fn refill_buffer(&mut self) -> Result<bool, TokenizerError> {
+        //Refill buffer
+        self.buffer.drain(0..self.start);
+        let drained = self.start;
+        for _ in 0..drained {
+            self.buffer.push(0)
+        }
+        self.start = 0;
+        self.end -= drained;
+        self.last_codepoint -= drained;
+
+        if self.end == self.buffer.len() - 1 {
+            return Err(TokenizerError::TokenTooBig)
+        }
+        self.end += self.file.read(&mut self.buffer[self.end + 1..self.buffer.len()])?;
+        if self.end == 0 {
+            return Ok(true)
+        }
+
+        if let Err(utferr) = std::str::from_utf8(&self.buffer[self.start..self.end]) {
+            if utferr.error_len().is_none() {
+                self.last_codepoint = utferr.valid_up_to()
+            } else {
+                return Err(TokenizerError::Utf8Error)
+            } 
+        } else {
+            self.last_codepoint = self.end
+        }
+
+        Ok(false)
+    }
+
+    fn gen_token<'a>(&'a mut self) -> Result<InternalToken<'a>, TokenizerError> {
         fn handle_symbol_number<'a, T>(
             id: &'static str,
             captures: &regex::Captures<'a>,
@@ -166,15 +204,21 @@ impl<'a> Tokenizer<'a> {
             }
         }
 
-        if self.current_possition.is_empty() {
+        let current_possition;
+
+        unsafe {
+            current_possition = std::str::from_utf8_unchecked(&self.buffer[self.start..self.last_codepoint]);
+        }
+
+        if current_possition.is_empty() {
             return Ok(InternalToken::EndOfFile(None));
         }
 
-        let unchecked_captures = REGEX.captures(self.current_possition);
+        let unchecked_captures = REGEX.captures(current_possition);
         let captures = if let Some(cap) = unchecked_captures {
             cap
         } else {
-            return Err(TokenizerError::unknown_token());
+            return Err(TokenizerError::UnknownToken);
         };
 
         let mut end_of_token = captures.get(0).unwrap().end();
@@ -208,16 +252,29 @@ impl<'a> Tokenizer<'a> {
             })
         };
 
-        self.current_possition = &self.current_possition[end_of_token..];
+        if let InternalToken::EndOfFile(_) = ret {} else {
+            self.start = end_of_token;
+        }
 
         Ok(ret)
     }
 }
 
-impl<'a> Iterator for Tokenizer<'a> {
+impl<'a, F> Iterator for &'a mut Tokenizer<F> where F: Read {
     type Item = Result<Token<'a>, TokenizerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.start == self.last_codepoint {
+            let status = self.refill_buffer();
+            if let Ok(end_of_file) = status {
+                if end_of_file {
+                    return None
+                }
+            } else {
+                return Some(Err(status.unwrap_err().into()))
+            }
+        }
+
         // Grab another token if its whitespace
         let mut token = self.gen_token();
         let mut can_ignore = true;
@@ -235,7 +292,23 @@ impl<'a> Iterator for Tokenizer<'a> {
 
         if token.is_end_of_file() {
             if let Ok(InternalToken::EndOfFile(ret)) = token {
-                ret.map(|inside| Ok(inside))
+                let status = self.refill_buffer();
+                let end_of_file;
+                if let Ok(eof) = status {
+                    eof = end_of_file;
+                } else {
+                    return Some(Err(status.unwrap_err().into()))
+                }
+
+                if end_of_file {
+                    // Clear buffer for eof
+                    self.start = 0;
+                    self.last_codepoint = 0;
+                    self.end = 0;
+                    Some(Ok(ret));
+                } else {
+                    self.next()
+                }
             } else {
                 panic!()
             }

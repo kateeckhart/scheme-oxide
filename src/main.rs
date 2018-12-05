@@ -21,12 +21,13 @@
 extern crate lazy_static;
 extern crate regex;
 
+use std::io;
 mod tokenizer;
 use tokenizer::Tokenizer;
 
 fn main() {
     let token_stream = r#""testing" "\""((()))875467 alex i+ i9 "" + ..."#;
-    for token in Tokenizer::new(token_stream) {
+    for token in &mut Tokenizer::new(io::Cursor::new(token_stream)) {
         println!("{:?}", token.unwrap())
     }
 }
