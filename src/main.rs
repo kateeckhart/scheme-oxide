@@ -25,6 +25,9 @@ use std::io;
 mod tokenizer;
 use tokenizer::Tokenizer;
 
+mod parser;
+mod types;
+
 fn main() {
     let token_stream = r#""testing" "\""((()))875467 alex i+ i9 "" + ..."#;
     for token in &mut Tokenizer::new(io::Cursor::new(token_stream)) {
