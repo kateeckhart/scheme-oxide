@@ -54,12 +54,13 @@ fn gen_regex() -> Regex {
     );
     let string_body = |id| format!(r#"(?P<{}Body>(?:[^"\\\n]|\\.)*)"#, id);
     let good_string = format!(r#"(?:"{}")"#, string_body("goodString"));
-    let bad_eof_string = format!(r#"(?:"{}$)"#, string_body("badEofString"));
+    let bad_eof_string = format!(r#"(?:"{}\\?$)"#, string_body("badEofString"));
     let number = format!("(?:(?P<number>[0-9]+){})", delimer("number"));
     let block = r"(?P<block>\(|\))";
+    let clipped = r"(?P<clipped>(?:\.{2}|#)$)";
     let regex_str = format!(
-        "^(?:{}|{}|{}|{}|(?P<whitespace>{}+)|{})",
-        number, symbol, good_string, block, whitespace, bad_eof_string
+        "^(?:{}|{}|{}|{}|(?P<whitespace>{}+)|{}|{})",
+        number, symbol, good_string, block, whitespace, bad_eof_string, clipped
     );
 
     Regex::new(&regex_str).unwrap()
@@ -72,7 +73,7 @@ lazy_static! {
 enum InternalToken {
     PublicToken(Token),
     Whitespace,
-    EndOfFile(Option<Token>),
+    EndOfFile(Option<Result<Token, TokenizerError>>),
 }
 
 impl InternalToken {
@@ -193,7 +194,7 @@ where
                 Some((
                     token.end(),
                     if captures.name(&format!("{}EndOfFile", id)).is_some() {
-                        InternalToken::EndOfFile(Some(ret))
+                        InternalToken::EndOfFile(Some(Ok(ret)))
                     } else {
                         InternalToken::PublicToken(ret)
                     },
@@ -204,8 +205,8 @@ where
         }
 
         if self.start == self.last_codepoint {
-            let end_of_file = self.refill_buffer()?;
-            if end_of_file {
+            self.refill_buffer()?;
+            if self.start == self.last_codepoint {
                 return Ok(InternalToken::EndOfFile(None));
             }
         }
@@ -231,6 +232,10 @@ where
             r.1
         } else if captures.name("badEofStringBody").is_some() {
             return Err(TokenizerError::UnexpectedEndOfFile);
+        } else if captures.name("clipped").is_some() {
+            return Ok(InternalToken::EndOfFile(Some(Err(
+                TokenizerError::UnexpectedEndOfFile,
+            ))));
         } else {
             InternalToken::PublicToken(if let Some(string) = captures.name("goodStringBody") {
                 Token::TString(string.as_str().to_string())
@@ -283,8 +288,6 @@ where
             true
         } else if let Err(TokenizerError::UnexpectedEndOfFile) = unchecked_token {
             true
-        } else if let Err(TokenizerError::UnknownToken) = unchecked_token {
-            true
         } else {
             false
         };
@@ -311,7 +314,7 @@ where
                     if let InternalToken::EndOfFile(None) = eof_or_token {
                         None
                     } else if let InternalToken::EndOfFile(Some(token)) = eof_or_token {
-                        Some(Ok(token))
+                        Some(token)
                     } else {
                         Some(Ok(eof_or_token.unwrap()))
                     }
