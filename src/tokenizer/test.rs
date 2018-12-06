@@ -1,4 +1,4 @@
-use super::{Token, Tokenizer, BUFFER_SIZE};
+use super::{Token, Tokenizer, TokenizerError, BUFFER_SIZE};
 use std::io::Cursor;
 
 fn cutoff_string(long_string: &str) {
@@ -34,4 +34,14 @@ fn cutoff_string_unicode() {
         long_string.insert(0, 'a');
         cutoff_string(&long_string);
     }
+}
+
+#[test]
+fn unicode_eof() {
+    let test = [0xF0, 0x9F, 0x98];
+    let token = Tokenizer::new(Cursor::new(test)).next();
+    if let Some(Err(TokenizerError::Utf8Error)) = token {
+    } else {
+        panic!("{:?}", token)
+    };
 }

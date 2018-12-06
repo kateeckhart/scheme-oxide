@@ -283,6 +283,8 @@ where
             true
         } else if let Err(TokenizerError::UnexpectedEndOfFile) = unchecked_token {
             true
+        } else if let Err(TokenizerError::UnknownToken) = unchecked_token {
+            true
         } else {
             false
         };
@@ -297,6 +299,10 @@ where
             }
 
             if end_of_file {
+                if self.last_codepoint != self.end {
+                    return Some(Err(TokenizerError::Utf8Error))
+                }
+
                 // Clear buffer for eof
                 self.start = 0;
                 self.last_codepoint = 0;
