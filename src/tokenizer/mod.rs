@@ -20,6 +20,9 @@
 use regex::Regex;
 use std::io::{self, prelude::*};
 
+#[cfg(test)]
+mod test;
+
 #[derive(Debug)]
 pub enum Block {
     Start,
@@ -87,7 +90,7 @@ impl InternalToken {
         }
     }
 
-    fn to_option(self) -> Option<Token> {
+    fn into_option(self) -> Option<Token> {
         match self {
             InternalToken::PublicToken(token) => Some(token),
             _ => None,
@@ -95,7 +98,7 @@ impl InternalToken {
     }
 
     fn unwrap(self) -> Token {
-        self.to_option().unwrap()
+        self.into_option().unwrap()
     }
 }
 
@@ -120,7 +123,10 @@ impl From<std::str::Utf8Error> for TokenizerError {
     }
 }
 
-pub struct Tokenizer<F> where F: Read {
+pub struct Tokenizer<F>
+where
+    F: Read,
+{
     buffer: Vec<u8>,
     start: usize,
     last_codepoint: usize,
@@ -128,10 +134,13 @@ pub struct Tokenizer<F> where F: Read {
     file: F,
 }
 
-impl<F> Tokenizer<F> where F: Read {
+impl<F> Tokenizer<F>
+where
+    F: Read,
+{
     pub fn new(file: F) -> Self {
         Tokenizer {
-            buffer: vec![0; 1024*16],
+            buffer: vec![0; 1024 * 16],
             start: 0,
             last_codepoint: 0,
             end: 0,
@@ -153,20 +162,20 @@ impl<F> Tokenizer<F> where F: Read {
         self.last_codepoint -= drained;
 
         if self.end == self.buffer.len() {
-            return Err(TokenizerError::TokenTooBig)
+            return Err(TokenizerError::TokenTooBig);
         }
         let old_end = self.end;
         let len = self.buffer.len();
         self.end += self.file.read(&mut self.buffer[old_end..len])?;
         if self.end == old_end {
-            return Ok(true)
+            return Ok(true);
         }
 
         if let Err(utferr) = std::str::from_utf8(&self.buffer[self.start..self.end]) {
-            self.last_codepoint = utferr.valid_up_to();
+            self.last_codepoint = utferr.valid_up_to() + 1;
             if utferr.error_len().is_some() {
-                return Err(TokenizerError::Utf8Error)
-            } 
+                return Err(TokenizerError::Utf8Error);
+            }
         } else {
             self.last_codepoint = self.end
         }
@@ -201,7 +210,7 @@ impl<F> Tokenizer<F> where F: Read {
         if self.start == self.last_codepoint {
             let end_of_file = self.refill_buffer()?;
             if end_of_file {
-                return Ok(InternalToken::EndOfFile(None)) 
+                return Ok(InternalToken::EndOfFile(None));
             }
         }
 
@@ -219,12 +228,12 @@ impl<F> Tokenizer<F> where F: Read {
         let ret = if captures.name("whitespace").is_some() {
             InternalToken::Whitespace
         } else if let Some(r) =
-            handle_symbol_number("symbol", &captures, |token| Token::Symbol(token))
+            handle_symbol_number("symbol", &captures, Token::Symbol)
         {
             end_of_token = r.0;
             r.1
         } else if let Some(r) =
-            handle_symbol_number("number", &captures, |token| Token::Number(token))
+            handle_symbol_number("number", &captures, Token::Number)
         {
             end_of_token = r.0;
             r.1
@@ -245,7 +254,8 @@ impl<F> Tokenizer<F> where F: Read {
             })
         };
 
-        if let InternalToken::EndOfFile(_) = ret {} else {
+        if let InternalToken::EndOfFile(_) = ret {
+        } else {
             self.start += end_of_token;
         }
 
@@ -253,7 +263,10 @@ impl<F> Tokenizer<F> where F: Read {
     }
 }
 
-impl<'a, F> Iterator for &'a mut Tokenizer<F> where F: Read {
+impl<'a, F> Iterator for &'a mut Tokenizer<F>
+where
+    F: Read,
+{
     type Item = Result<Token, TokenizerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -272,14 +285,18 @@ impl<'a, F> Iterator for &'a mut Tokenizer<F> where F: Read {
             can_ignore = false;
         }
 
-        if token.as_ref().ok().map_or(false, |inner| inner.is_end_of_file()) {
+        if token
+            .as_ref()
+            .ok()
+            .map_or(false, |inner| inner.is_end_of_file())
+        {
             if let Ok(InternalToken::EndOfFile(ret)) = token {
                 let status = self.refill_buffer();
                 let end_of_file;
                 if let Ok(eof) = status {
                     end_of_file = eof;
                 } else {
-                    return Some(Err(status.unwrap_err().into()))
+                    return Some(Err(status.unwrap_err()));
                 }
 
                 if end_of_file {
@@ -287,7 +304,7 @@ impl<'a, F> Iterator for &'a mut Tokenizer<F> where F: Read {
                     self.start = 0;
                     self.last_codepoint = 0;
                     self.end = 0;
-                    ret.map(|inner| Ok(inner))
+                    ret.map(Ok)
                 } else {
                     self.next()
                 }
