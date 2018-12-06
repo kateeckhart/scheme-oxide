@@ -300,7 +300,7 @@ where
 
             if end_of_file {
                 if self.last_codepoint != self.end {
-                    return Some(Err(TokenizerError::Utf8Error))
+                    return Some(Err(TokenizerError::Utf8Error));
                 }
 
                 // Clear buffer for eof
