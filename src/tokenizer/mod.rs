@@ -23,13 +23,13 @@ use std::io::{self, prelude::*};
 #[cfg(test)]
 mod test;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Block {
     Start,
     End,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Token {
     Block(Block),
     TString(String),
@@ -52,12 +52,14 @@ fn gen_regex() -> Regex {
         odd_symbol,
         delimer("symbol")
     );
-    let string = r#"(?:"(?P<string>(?:[^"\\\n]|\\.)*)")"#;
+    let string_body = |id| format!(r#"(?P<{}Body>(?:[^"\\\n]|\\.)*)"#, id);
+    let good_string = format!(r#"(?:"{}")"#, string_body("goodString"));
+    let bad_eof_string = format!(r#"(?:"{}$)"#, string_body("badEofString"));
     let number = format!("(?:(?P<number>[0-9]+){})", delimer("number"));
     let block = r"(?P<block>\(|\))";
     let regex_str = format!(
-        "^(?:{}|{}|{}|{}|(?P<whitespace>{}+))",
-        number, string, symbol, block, whitespace
+        "^(?:{}|{}|{}|{}|(?P<whitespace>{}+)|{})",
+        number, symbol, good_string, block, whitespace, bad_eof_string
     );
 
     Regex::new(&regex_str).unwrap()
@@ -79,14 +81,6 @@ impl InternalToken {
             InternalToken::PublicToken(_) => false,
             InternalToken::EndOfFile(_) => false,
             InternalToken::Whitespace => true,
-        }
-    }
-
-    fn is_end_of_file(&self) -> bool {
-        if let InternalToken::EndOfFile(_) = self {
-            true
-        } else {
-            false
         }
     }
 
@@ -134,13 +128,15 @@ where
     file: F,
 }
 
+const BUFFER_SIZE: usize = 1024 * 16;
+
 impl<F> Tokenizer<F>
 where
     F: Read,
 {
     pub fn new(file: F) -> Self {
         Tokenizer {
-            buffer: vec![0; 1024 * 16],
+            buffer: vec![0; BUFFER_SIZE],
             start: 0,
             last_codepoint: 0,
             end: 0,
@@ -157,7 +153,7 @@ where
         for _ in 0..drained {
             self.buffer.push(0)
         }
-        self.start = 0;
+        self.start -= drained;
         self.end -= drained;
         self.last_codepoint -= drained;
 
@@ -172,12 +168,12 @@ where
         }
 
         if let Err(utferr) = std::str::from_utf8(&self.buffer[self.start..self.end]) {
-            self.last_codepoint = utferr.valid_up_to() + 1;
+            self.last_codepoint = utferr.valid_up_to();
             if utferr.error_len().is_some() {
                 return Err(TokenizerError::Utf8Error);
             }
         } else {
-            self.last_codepoint = self.end
+            self.last_codepoint = self.end;
         }
 
         Ok(false)
@@ -227,18 +223,16 @@ where
 
         let ret = if captures.name("whitespace").is_some() {
             InternalToken::Whitespace
-        } else if let Some(r) =
-            handle_symbol_number("symbol", &captures, Token::Symbol)
-        {
+        } else if let Some(r) = handle_symbol_number("symbol", &captures, Token::Symbol) {
             end_of_token = r.0;
             r.1
-        } else if let Some(r) =
-            handle_symbol_number("number", &captures, Token::Number)
-        {
+        } else if let Some(r) = handle_symbol_number("number", &captures, Token::Number) {
             end_of_token = r.0;
             r.1
+        } else if captures.name("badEofStringBody").is_some() {
+            return Err(TokenizerError::UnexpectedEndOfFile);
         } else {
-            InternalToken::PublicToken(if let Some(string) = captures.name("string") {
+            InternalToken::PublicToken(if let Some(string) = captures.name("goodStringBody") {
                 Token::TString(string.as_str().to_string())
             } else if let Some(block) = captures.name("block") {
                 let block_char = block.as_str();
@@ -263,7 +257,7 @@ where
     }
 }
 
-impl<'a, F> Iterator for &'a mut Tokenizer<F>
+impl<'a, F> Iterator for Tokenizer<F>
 where
     F: Read,
 {
@@ -271,48 +265,60 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         // Grab another token if its whitespace
-        let mut token = self.gen_token();
+        let mut unchecked_token = self.gen_token();
         let mut can_ignore = true;
         while can_ignore {
-            if let Ok(tok) = token {
-                if tok.can_ignore() {
-                    token = self.gen_token();
+            if let Ok(token) = unchecked_token {
+                if token.can_ignore() {
+                    unchecked_token = self.gen_token();
                     continue;
                 } else {
-                    token = Ok(tok);
+                    unchecked_token = Ok(token);
                 }
             }
             can_ignore = false;
         }
 
-        if token
-            .as_ref()
-            .ok()
-            .map_or(false, |inner| inner.is_end_of_file())
-        {
-            if let Ok(InternalToken::EndOfFile(ret)) = token {
-                let status = self.refill_buffer();
-                let end_of_file;
-                if let Ok(eof) = status {
-                    end_of_file = eof;
-                } else {
-                    return Some(Err(status.unwrap_err()));
-                }
+        let is_eof = if let Ok(InternalToken::EndOfFile(_)) = unchecked_token {
+            true
+        } else if let Err(TokenizerError::UnexpectedEndOfFile) = unchecked_token {
+            true
+        } else {
+            false
+        };
 
-                if end_of_file {
-                    // Clear buffer for eof
-                    self.start = 0;
-                    self.last_codepoint = 0;
-                    self.end = 0;
-                    ret.map(Ok)
+        if is_eof {
+            let status = self.refill_buffer();
+            let end_of_file;
+            if let Ok(eof) = status {
+                end_of_file = eof;
+            } else {
+                return Some(Err(status.unwrap_err()));
+            }
+
+            if end_of_file {
+                // Clear buffer for eof
+                self.start = 0;
+                self.last_codepoint = 0;
+                self.end = 0;
+                if let Ok(eof_or_token) = unchecked_token {
+                    if let InternalToken::EndOfFile(None) = eof_or_token {
+                        None
+                    } else if let InternalToken::EndOfFile(Some(token)) = eof_or_token {
+                        Some(Ok(token))
+                    } else {
+                        Some(Ok(eof_or_token.unwrap()))
+                    }
+                } else if let Err(err) = unchecked_token {
+                    Some(Err(err))
                 } else {
-                    self.next()
+                    unreachable!()
                 }
             } else {
-                panic!()
+                self.next()
             }
         } else {
-            Some(token.map(|toke| toke.unwrap()))
+            Some(unchecked_token.map(InternalToken::unwrap))
         }
     }
 }
