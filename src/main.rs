@@ -28,6 +28,15 @@ use tokenizer::Tokenizer;
 mod parser;
 mod types;
 
+//Transpose pollyfill
+fn transpose_result<T, E>(result: Result<Option<T>, E>) -> Option<Result<T, E>> {
+    match result {
+        Ok(Some(x)) => Some(Ok(x)),
+        Ok(None) => None,
+        Err(e) => Some(Err(e)),
+    }
+}
+
 fn main() {
     let token_stream = r#""testing" "\""((()))875467 alex i+ i9 "" + ..."#;
     for token in &mut Tokenizer::new(io::Cursor::new(token_stream)) {
