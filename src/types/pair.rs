@@ -20,8 +20,8 @@ impl Display for SchemePair {
 
             if let Ok(item) = item_or_err {
                 item.fmt(f)?
-            } else if let Err(PairIterError::Improper(last)) = item_or_err {
-                write!(f, " . {}", last)?;
+            } else if let Err(PairIterError::Improper((next_to_last, last))) = item_or_err {
+                write!(f, "{} . {}", next_to_last, last)?;
                 break
             } else {
                 return Err(fmt::Error)
@@ -53,7 +53,7 @@ struct PairIter {
 
 enum PairIterError {
     Circular,
-    Improper(SchemeType),
+    Improper((SchemeType, SchemeType)),
 }
 
 impl Iterator for PairIter {
@@ -74,7 +74,7 @@ impl Iterator for PairIter {
             self.pair = None;
             Ok(pair_ref.0.clone())
         } else {
-            Err(PairIterError::Improper(pair_ref.0.clone()))
+            Err(PairIterError::Improper((pair_ref.0.clone(), pair_ref.1.clone())))
         })
     }
 }
