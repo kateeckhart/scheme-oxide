@@ -46,7 +46,7 @@ fn transpose_option<T, E>(option: Option<Result<T, E>>) -> Result<Option<T>, E> 
 }
 
 fn main() {
-    let token_stream = r#"(test  "string" "\\escaped" ((nested)) ( ) ...)"#;
+    let token_stream = r#"(test  "string" "\\escaped" ((nested)) ( ) 87456 ...)"#;
     for object in Parser::new(io::Cursor::new(token_stream)) {
         println!("{}", object.unwrap())
     }
