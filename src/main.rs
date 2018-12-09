@@ -23,9 +23,9 @@ extern crate regex;
 
 use std::io;
 mod tokenizer;
-use tokenizer::Tokenizer;
 
 mod parser;
+use parser::Parser;
 mod types;
 
 //Transpose pollyfill
@@ -37,9 +37,17 @@ fn transpose_result<T, E>(result: Result<Option<T>, E>) -> Option<Result<T, E>> 
     }
 }
 
+fn transpose_option<T, E>(option: Option<Result<T, E>>) -> Result<Option<T>, E> {
+    match option {
+        Some(Ok(x)) => Ok(Some(x)),
+        None => Ok(None),
+        Some(Err(e)) => Err(e),
+    }
+}
+
 fn main() {
-    let token_stream = r#""testing" "\""((()))875467 alex i+ i9 "" + ..."#;
-    for token in &mut Tokenizer::new(io::Cursor::new(token_stream)) {
-        println!("{:?}", token.unwrap())
+    let token_stream = r#"(test  "string" "\\escaped" ((nested)) ( ) ...)"#;
+    for object in Parser::new(io::Cursor::new(token_stream)) {
+        println!("{}", object.unwrap())
     }
 }

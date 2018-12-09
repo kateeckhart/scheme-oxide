@@ -1,5 +1,5 @@
 use tokenizer::{Tokenizer, TokenizerError, Token, Block};
-use transpose_result;
+use {transpose_result, transpose_option};
 use types::*;
 
 enum ParserToken {
@@ -24,12 +24,12 @@ impl ParserToken {
             Token::Symbol(symbol) => 
                 ParserToken::Datum(SchemeType::Symbol(symbol)),
             Token::Number(num) =>
-                ParserToken::Datum(SchemeType::Number(u64::from_str_radix(&num, 10)?))
-
+                ParserToken::Datum(SchemeType::Number(i64::from_str_radix(&num, 10)?))
         })
     }
 }
 
+#[derive(Debug)]
 pub enum ParserError {
     TokenizerError(TokenizerError),
     NumberParse,
@@ -76,18 +76,30 @@ pub struct Parser<F> where F: std::io::Read {
 }
 
 impl<F> Parser<F> where F: std::io::Read {
+    pub fn new(file: F) -> Self {
+        Parser {
+            stack: Vec::new(),
+            tokenizer: Tokenizer::new(file),
+        }
+    }
+
+    //True if end of file
+    fn push_input(&mut self) -> Result<bool, ParserError> {
+        Ok(if let Some(token) = transpose_option(self.tokenizer.next())? {
+            self.stack.push(ParserToken::from_token(token)?);
+            false
+        } else {
+            true
+        })
+    }
+
     fn iter_once(&mut self) -> Result<Option<SchemeType>, ParserError> {
         loop {
             let stack_top = self.stack.pop();
             match stack_top {
                 None => {
-                    let token_or_none = self.tokenizer.next();
-                    if let Some(Ok(token)) = token_or_none {
-                        self.stack.push(ParserToken::from_token(token)?);
-                    } else if let Some(Err(err)) = token_or_none {
-                        return Err(err.into());
-                    } else {
-                        return Ok(None);
+                    if self.push_input()? {
+                        return Ok(None)
                     }
                 }
                 Some(ParserToken::Datum(datum)) => {
@@ -113,7 +125,23 @@ impl<F> Parser<F> where F: std::io::Read {
                         _ => return Err(ParserError::Syntax)
                     }
                 },
-                _ => self.stack.push(stack_top.unwrap()), 
+                Some(ParserToken::ListEnd) => {
+                    match self.stack.pop() {
+                        Some(ParserToken::ListBegin) => {
+                            self.stack.push(ParserToken::Datum(SchemeType::EmptyList))
+                        },
+                        Some(ParserToken::PartialList {head, ..}) => {
+                            self.stack.push(ParserToken::Datum(SchemeType::Pair(head)))
+                        },
+                        _ => return Err(ParserError::Syntax)
+                    }
+                },
+                _ => {
+                    self.stack.push(stack_top.unwrap());
+                    if self.push_input()? {
+                        return Err(ParserError::TokenizerError(TokenizerError::UnexpectedEndOfFile))
+                    }
+                }
             }
         }
     }
