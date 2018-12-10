@@ -25,7 +25,7 @@ use std::io;
 mod tokenizer;
 
 mod parser;
-use parser::Parser;
+use parser::DatumParser;
 mod types;
 
 //Transpose pollyfill
@@ -46,8 +46,16 @@ fn transpose_option<T, E>(option: Option<Result<T, E>>) -> Result<Option<T>, E> 
 }
 
 fn main() {
-    let token_stream = r#"(test  "string" "\\escaped" ((nested)) ( ) 87456 ...)"#;
-    for object in Parser::new(io::Cursor::new(token_stream)) {
-        println!("{}", object.unwrap())
+    let token_stream = r#"((+ (+ 1 (+ 1 1 1)) 1))"#;
+    for object in DatumParser::new(io::Cursor::new(token_stream)) {
+        let program = if let Ok(types::SchemeType::Pair(prog)) = object {
+            prog
+        } else {
+            panic!("{:?}", object)
+        };
+        let ast = parser::ast::gen_ast(program).unwrap();
+        for node in ast {
+            println!("{}", node.exec().unwrap())
+        }
     }
 }

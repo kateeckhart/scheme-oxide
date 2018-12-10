@@ -1,8 +1,6 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::fmt::{Display, Formatter, self};
+use std::fmt::{self, Display, Formatter};
 
-mod pair;
+pub mod pair;
 pub use self::pair::SchemePair;
 
 #[derive(Clone, Debug)]
