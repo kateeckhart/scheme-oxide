@@ -22,11 +22,13 @@ extern crate lazy_static;
 extern crate regex;
 
 use std::io;
-mod tokenizer;
 
 mod parser;
-use parser::DatumParser;
+use parser::datum::DatumParser;
 mod types;
+
+mod interperter;
+//use interperter::exec_ast;
 
 //Transpose pollyfill
 fn transpose_result<T, E>(result: Result<Option<T>, E>) -> Option<Result<T, E>> {
@@ -55,7 +57,7 @@ fn main() {
         };
         let ast = parser::ast::gen_ast(program).unwrap();
         for node in ast {
-            println!("{}", node.exec().unwrap())
+            //println!("{}", exec_ast(node).unwrap())
         }
     }
 }

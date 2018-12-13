@@ -21,7 +21,7 @@ use regex::Regex;
 use std::io::{self, prelude::*};
 
 #[cfg(test)]
-mod test;
+mod tokenizertests;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Block {
