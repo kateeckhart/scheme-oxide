@@ -55,9 +55,5 @@ fn main() {
         } else {
             panic!("{:?}", object)
         };
-        let ast = parser::ast::gen_ast(program).unwrap();
-        for node in ast {
-            //println!("{}", exec_ast(node).unwrap())
-        }
     }
 }

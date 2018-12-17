@@ -83,6 +83,12 @@ pub struct PairIter {
     pair: Option<SchemePair>,
 }
 
+impl PairIter {
+    pub fn get_cdr(&self) -> Option<SchemeType> {
+        self.pair.as_ref().map(|pair| pair.get_cdr())
+    }
+}
+
 #[derive(Debug)]
 pub enum PairIterError {
     Circular,

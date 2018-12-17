@@ -21,10 +21,12 @@ use std::fmt::{self, Display, Formatter};
 
 pub mod pair;
 pub use self::pair::SchemePair;
+use interperter::FunctionRef;
 
 #[derive(Clone, Debug)]
 pub enum SchemeType {
     Pair(SchemePair),
+    Function(FunctionRef),
     Number(i64),
     String(String),
     Symbol(String),
@@ -49,6 +51,7 @@ impl Display for SchemeType {
             }
             SchemeType::Symbol(symbol) => symbol.fmt(f)?,
             SchemeType::EmptyList => write!(f, "()")?,
+            _ => return Err(fmt::Error),
         }
         Ok(())
     }
