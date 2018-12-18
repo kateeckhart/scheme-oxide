@@ -84,8 +84,8 @@ pub struct PairIter {
 }
 
 impl PairIter {
-    pub fn get_cdr(&self) -> Option<SchemeType> {
-        self.pair.as_ref().map(|pair| pair.get_cdr())
+    pub fn get_rest(&self) -> Option<SchemePair> {
+        self.pair.clone()
     }
 }
 

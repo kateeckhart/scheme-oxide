@@ -39,13 +39,9 @@ struct StackFrame {
 pub struct Stack(Vec<StackFrame>);
 
 impl Stack {
-    fn ret(&mut self, value: SchemeType) {
-        let last = self.0.len() - 1;
-        self.0[last].arg_stack.push(value)
+    fn top_mut(&mut self) -> &mut StackFrame {
+        self.0.last_mut().unwrap()
     }
-}
-
-impl FunctionRef {
 }
 
 #[derive(Debug, Clone)]
@@ -60,18 +56,20 @@ enum BuiltinFunction {
 }
 
 impl BuiltinFunction {
-    fn call(self, stack: &mut Stack, mut args: Vec<SchemeType>) -> Result<(), RuntimeError> {
+    fn call(self, stack: &mut Stack, argc: u32) -> Result<(), RuntimeError> {
         match self {
             BuiltinFunction::Add => {
+                let arg_stack = &mut stack.top_mut().arg_stack;
                 let mut sum = 0;
-                for s_num in args.drain(..) {
+                for _ in 0..argc {
+                    let s_num = arg_stack.pop().unwrap();
                     if let SchemeType::Number(num) = s_num {
                         sum += num;
                     } else {
                         return Err(RuntimeError::TypeError);
                     }
-                    stack.ret(SchemeType::Number(sum))
                 }
+                arg_stack.push(SchemeType::Number(sum))
             }
         }
         Ok(())
@@ -196,8 +194,7 @@ struct PartialFunction {
 enum CompilerAction {
     Compile { expr_count: u32, code: SchemePair },
     CompileDone { expr_count: u32 },
-    Call(u32),
-    ProgramDone,
+    Call,
 }
 
 impl PartialFunction {
@@ -264,7 +261,6 @@ impl SchemeFunction {
         code: SchemePair,
     ) -> Result<Self, CompilerError> {
         let mut stack = vec![
-            CompilerAction::ProgramDone,
             CompilerAction::Compile {
                 expr_count: 0,
                 code,
@@ -296,45 +292,39 @@ impl SchemeFunction {
                         match expr {
                             SchemeType::Pair(pair) => {
                                 let function_object = pair.get_car();
-                                let function_name;
-                                if let SchemeType::Symbol(func) = function_object {
-                                    function_name = func;
-                                } else {
-                                    return Err(CompilerError::SyntaxError);
+                                if let SchemeType::Symbol(function_name) = function_object {
+                                    let calling_function = function.lookup(&function_name)?;
+                                    if let CompilerType::Macro(_) = calling_function {
+                                        unimplemented!()
+                                    }
                                 }
 
-                                let calling_function = function.lookup(&function_name)?;
-                                let args = if let SchemeType::Pair(a) = pair.get_cdr() {
-                                    a
-                                } else {
-                                    return Err(CompilerError::BadList);
-                                };
-
-                                if let Some(rest_or_bad) = expr_iter.get_cdr() {
-                                    if let SchemeType::Pair(rest) = rest_or_bad {
-                                        stack.push(CompilerAction::Compile {
-                                            expr_count,
-                                            code: rest,
-                                        })
-                                    } else {
-                                        return Err(CompilerError::BadList);
-                                    }
+                                if let Some(rest) = expr_iter.get_rest() {
+                                    stack.push(CompilerAction::Compile {
+                                        expr_count,
+                                        code: rest,
+                                    })
                                 } else {
                                     stack.push(CompilerAction::CompileDone { expr_count })
                                 }
 
-                                match calling_function {
-                                    CompilerType::Runtime(ident) => {
-                                        stack.push(CompilerAction::Call(ident));
-                                        stack.push(CompilerAction::Compile {
-                                            expr_count: 0,
-                                            code: args,
-                                        });
-                                    }
-                                    CompilerType::Macro(_) => unimplemented!(),
-                                }
+                                stack.push(CompilerAction::Call);
+                                stack.push(CompilerAction::Compile {
+                                    expr_count: 0,
+                                    code: pair,
+                                });
 
                                 continue 'stack_loop;
+                            }
+                            SchemeType::Symbol(ident_name) => {
+                                let ident_or_macro = function.lookup(&ident_name)?;
+
+                                if let CompilerType::Runtime(ident) = ident_or_macro {
+                                    function.compiled_code.code.push(Statement {
+                                        s_type: StatementType::Get,
+                                        arg: ident,
+                                    })
+                                }
                             }
                             _ => {
                                 function.compiled_code.code.push(Statement {
@@ -347,18 +337,14 @@ impl SchemeFunction {
                     }
                     stack.push(CompilerAction::CompileDone { expr_count })
                 }
-                CompilerAction::CompileDone { expr_count } => match stack.pop().unwrap() {
-                    CompilerAction::Call(calling_function) => {
-                        function.compiled_code.code.push(Statement {
-                            s_type: StatementType::Literal,
-                            arg: calling_function,
-                        });
+                CompilerAction::CompileDone { expr_count } => match stack.pop() {
+                    Some(CompilerAction::Call) => {
                         function.compiled_code.code.push(Statement {
                             s_type: StatementType::Call,
-                            arg: expr_count,
+                            arg: expr_count - 1,
                         });
                     }
-                    CompilerAction::ProgramDone => return Ok(function.compiled_code),
+                    None => return Ok(function.compiled_code),
                     _ => unreachable!(),
                 },
                 _ => unreachable!(),
