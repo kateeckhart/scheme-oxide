@@ -19,12 +19,12 @@
 
 mod tokenizer;
 use self::tokenizer::{Block, Token, Tokenizer, TokenizerError};
+use types::pair::ListFactory;
 use types::*;
 use {transpose_option, transpose_result};
 
 enum ParserToken {
-    PartialList { head: SchemePair, tail: SchemePair },
-    ListBegin,
+    PartialList(ListFactory),
     ListEnd,
     Datum(SchemeType),
 }
@@ -32,7 +32,7 @@ enum ParserToken {
 impl ParserToken {
     fn from_token(token: Token) -> Result<ParserToken, DatumParserError> {
         Ok(match token {
-            Token::Block(Block::Start) => ParserToken::ListBegin,
+            Token::Block(Block::Start) => ParserToken::PartialList(ListFactory::new()),
             Token::Block(Block::End) => ParserToken::ListEnd,
             Token::TString(string) => {
                 ParserToken::Datum(SchemeType::String(unescape_string(&string)?))
@@ -128,29 +128,16 @@ where
                 }
                 Some(ParserToken::Datum(datum)) => match self.stack.pop() {
                     None => return Ok(Some(datum)),
-                    Some(ParserToken::ListBegin) => {
-                        let list = SchemePair::new(datum, SchemeType::EmptyList);
-                        self.stack.push(ParserToken::PartialList {
-                            head: list.clone(),
-                            tail: list,
-                        })
-                    }
-                    Some(ParserToken::PartialList { head, tail }) => {
-                        let new_tail = SchemePair::new(datum, SchemeType::EmptyList);
-                        tail.set_cdr(SchemeType::Pair(new_tail.clone()));
-                        self.stack.push(ParserToken::PartialList {
-                            head,
-                            tail: new_tail,
-                        })
+                    Some(ParserToken::PartialList(mut factory)) => {
+                        factory.push(datum);
+                        self.stack.push(ParserToken::PartialList(factory))
                     }
                     _ => return Err(DatumParserError::Syntax),
                 },
                 Some(ParserToken::ListEnd) => match self.stack.pop() {
-                    Some(ParserToken::ListBegin) => {
-                        self.stack.push(ParserToken::Datum(SchemeType::EmptyList))
-                    }
-                    Some(ParserToken::PartialList { head, .. }) => {
-                        self.stack.push(ParserToken::Datum(SchemeType::Pair(head)))
+                    Some(ParserToken::PartialList(factory)) => {
+                        let datum = factory.build();
+                        self.stack.push(ParserToken::Datum(datum.into()));
                     }
                     _ => return Err(DatumParserError::Syntax),
                 },

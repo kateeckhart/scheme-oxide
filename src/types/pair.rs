@@ -77,6 +77,14 @@ impl SchemePair {
             pair: Some(self.clone()),
         }
     }
+
+    pub fn len(&self) -> usize {
+        let mut count = 0;
+        for object in self.iter() {
+            count += 1;
+        }
+        count
+    }
 }
 
 pub struct PairIter {
@@ -118,5 +126,32 @@ impl Iterator for PairIter {
                 pair_ref.1.clone(),
             )))
         })
+    }
+}
+
+pub struct ListFactory {
+    head: Option<SchemePair>,
+    tail: Option<SchemePair>,
+}
+
+impl ListFactory {
+    pub fn new() -> Self {
+        Self {
+            head: None,
+            tail: None,
+        }
+    }
+    pub fn push(&mut self, object: SchemeType) {
+        let new_tail = SchemePair::new(object, SchemeType::EmptyList);
+        if let Some(ref tail) = self.tail {
+            tail.set_cdr(new_tail.clone().into());
+        } else {
+            self.head = Some(new_tail.clone());
+        }
+        self.tail = Some(new_tail);
+    }
+
+    pub fn build(self) -> Option<SchemePair> {
+        self.head
     }
 }

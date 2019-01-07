@@ -56,3 +56,18 @@ impl Display for SchemeType {
         Ok(())
     }
 }
+
+impl From<SchemePair> for SchemeType {
+    fn from(pair: SchemePair) -> SchemeType {
+        SchemeType::Pair(pair)
+    }
+}
+
+impl From<Option<SchemePair>> for SchemeType {
+    fn from(pair: Option<SchemePair>) -> SchemeType {
+        match pair {
+            None => SchemeType::EmptyList,
+            Some(contents) => SchemeType::Pair(contents),
+        }
+    }
+}

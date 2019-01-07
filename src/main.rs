@@ -26,9 +26,9 @@ use std::io;
 mod parser;
 use parser::datum::DatumParser;
 mod types;
+use types::pair::ListFactory;
 
 mod interperter;
-//use interperter::exec_ast;
 
 //Transpose pollyfill
 fn transpose_result<T, E>(result: Result<Option<T>, E>) -> Option<Result<T, E>> {
@@ -48,12 +48,11 @@ fn transpose_option<T, E>(option: Option<Result<T, E>>) -> Result<Option<T>, E> 
 }
 
 fn main() {
-    let token_stream = r#"((+ (+ 1 (+ 1 1 1)) 1))"#;
+    let token_stream = r#"(+ (+ 1 1 1) 1 4 3)"#;
+    let mut prog_factory = ListFactory::new();
     for object in DatumParser::new(io::Cursor::new(token_stream)) {
-        let program = if let Ok(types::SchemeType::Pair(prog)) = object {
-            prog
-        } else {
-            panic!("{:?}", object)
-        };
+        prog_factory.push(object.unwrap())
     }
+    let prog = prog_factory.build().unwrap();
+    println!("{}", interperter::eval(prog).unwrap());
 }
