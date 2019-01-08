@@ -71,6 +71,7 @@ fn exec_function(
     object: SchemeType,
     stack: &mut Vec<StackFrame>,
     argc: u32,
+    ret: &mut SchemeType,
 ) -> Result<(), RuntimeError> {
     let function;
     if let SchemeType::Function(func) = object {
@@ -79,14 +80,14 @@ fn exec_function(
         return Err(RuntimeError::TypeError);
     }
 
-    function.call(stack, argc)
+    function.call(stack, argc, ret)
 }
 
 fn exec_top_function(
     top: Rc<SchemeFunction>,
     env: Vec<SchemeType>,
 ) -> Result<SchemeType, RuntimeError> {
-    if top.args != 0 {
+    if top.args != 0 || top.is_vargs {
         panic!("Not a top level function.");
     }
     let mut stack = vec![StackFrame {
@@ -94,12 +95,15 @@ fn exec_top_function(
         statement_num: 0,
         function: top.clone(),
     }];
-    let mut top_expr = SchemeType::EmptyList;
+    let mut ret_expr = SchemeType::EmptyList;
     'exec_loop: while let Some(s_frame) = stack.pop() {
         let mut frame = s_frame.top;
         let function = s_frame.function.clone();
         let code_len = function.code.len();
         let mut code_iter = function.code[s_frame.statement_num..code_len].iter();
+        if s_frame.statement_num > 0 {
+            frame.arg_stack.push(ret_expr.clone())
+        }
         while let Some(statement) = code_iter.next() {
             let arg = statement.arg;
             match statement.s_type {
@@ -115,20 +119,18 @@ fn exec_top_function(
                         statement_num,
                         function: function.clone(),
                     });
-                    exec_function(new_function, &mut stack, arg)?;
+                    exec_function(new_function, &mut stack, arg, &mut ret_expr)?;
                     continue 'exec_loop;
                 }
             }
         }
-        top_expr = frame.arg_stack.pop().unwrap();
     }
-    Ok(top_expr)
+    Ok(ret_expr)
 }
 
 pub fn eval(object: SchemePair) -> Result<SchemeType, RuntimeError> {
     let function = MAIN_ENVIRONMENT.with(|env| compiler::compile_function(&env.frame, object));
     let env = MAIN_ENVIRONMENT.with(|env| env.bounded.clone());
-    println!("{:?}", function);
     exec_top_function(Rc::new(function?), env)
 }
 
@@ -154,9 +156,9 @@ enum FunctionRefInner {
 }
 
 impl FunctionRefInner {
-    fn call(self, stack: &mut Vec<StackFrame>, argc: u32) -> Result<(), RuntimeError> {
+    fn call(self, stack: &mut Vec<StackFrame>, argc: u32, ret: &mut SchemeType) -> Result<(), RuntimeError> {
         match self {
-            FunctionRefInner::Builtin(func) => func.call(stack, argc),
+            FunctionRefInner::Builtin(func) => func.call(stack, argc, ret),
             _ => unimplemented!(),
         }
     }
@@ -168,7 +170,7 @@ enum BuiltinFunction {
 }
 
 impl BuiltinFunction {
-    fn call(self, stack: &mut Vec<StackFrame>, argc: u32) -> Result<(), RuntimeError> {
+    fn call(self, stack: &mut Vec<StackFrame>, argc: u32, ret: &mut SchemeType) -> Result<(), RuntimeError> {
         let arg_stack = &mut stack.last_mut().unwrap().top.arg_stack;
         match self {
             BuiltinFunction::Add => {
@@ -181,7 +183,7 @@ impl BuiltinFunction {
                         return Err(RuntimeError::TypeError);
                     }
                 }
-                arg_stack.push(SchemeType::Number(sum))
+                *ret = SchemeType::Number(sum)
             }
         }
         Ok(())

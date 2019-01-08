@@ -187,7 +187,7 @@ pub fn compile_function(
 
 
                             let (argc, argv) = match pair.get_cdr() {
-                                SchemeType::Pair(rest) => (rest.len(), Some(rest)),
+                                SchemeType::Pair(rest) => (rest.len()?, Some(rest)),
                                 SchemeType::EmptyList => (0, None),
                                 _ => return Err(CompilerError::SyntaxError),
                             };

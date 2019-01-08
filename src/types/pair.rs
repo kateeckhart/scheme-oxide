@@ -78,12 +78,13 @@ impl SchemePair {
         }
     }
 
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> Result<usize, PairIterError> {
         let mut count = 0;
         for object in self.iter() {
+            object?;
             count += 1;
         }
-        count
+        Ok(count)
     }
 }
 
