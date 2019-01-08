@@ -2,6 +2,7 @@
 name = "scheme-oxide"
 version = "0.1.0"
 authors = ["alex"]
+edition = "2018"
 
 [dependencies]
 regex = "^1.0"

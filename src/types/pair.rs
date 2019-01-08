@@ -20,7 +20,7 @@
 use std::cell::RefCell;
 use std::fmt::{self, Display, Formatter};
 use std::rc::Rc;
-use types::*;
+use crate::types::*;
 
 #[derive(Clone, Debug)]
 pub struct SchemePair(Rc<RefCell<(SchemeType, SchemeType)>>);

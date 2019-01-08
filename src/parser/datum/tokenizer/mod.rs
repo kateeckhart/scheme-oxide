@@ -19,6 +19,7 @@
 
 use regex::Regex;
 use std::io::{self, prelude::*};
+use lazy_static::lazy_static;
 
 #[cfg(test)]
 mod tests;

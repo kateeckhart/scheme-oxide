@@ -19,7 +19,7 @@
 
 use super::{SchemeFunction, Statement, StatementType};
 use std::collections::HashMap;
-use types::*;
+use crate::types::*;
 
 #[derive(Clone)]
 pub struct EnvironmentFrame {

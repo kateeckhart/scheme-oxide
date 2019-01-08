@@ -17,16 +17,12 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#[macro_use]
-extern crate lazy_static;
-extern crate regex;
-
 use std::io;
 
 mod parser;
-use parser::datum::DatumParser;
+use crate::parser::datum::DatumParser;
 mod types;
-use types::pair::ListFactory;
+use crate::types::pair::ListFactory;
 
 mod interperter;
 

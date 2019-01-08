@@ -21,7 +21,7 @@ use std::fmt::{self, Display, Formatter};
 
 pub mod pair;
 pub use self::pair::SchemePair;
-use interperter::FunctionRef;
+use crate::interperter::FunctionRef;
 
 #[derive(Clone, Debug)]
 pub enum SchemeType {

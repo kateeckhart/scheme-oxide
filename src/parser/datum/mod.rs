@@ -19,9 +19,9 @@
 
 mod tokenizer;
 use self::tokenizer::{Block, Token, Tokenizer, TokenizerError};
-use types::pair::ListFactory;
-use types::*;
-use {transpose_option, transpose_result};
+use crate::types::pair::ListFactory;
+use crate::types::*;
+use crate::{transpose_option, transpose_result};
 
 enum ParserToken {
     PartialList(ListFactory),

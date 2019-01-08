@@ -19,7 +19,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use types::*;
+use crate::types::*;
 
 mod compiler;
 pub use self::compiler::CompilerError;
