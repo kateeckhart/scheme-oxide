@@ -17,10 +17,10 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use crate::types::*;
 use std::cell::RefCell;
 use std::fmt::{self, Display, Formatter};
 use std::rc::Rc;
-use crate::types::*;
 
 #[derive(Clone, Debug)]
 pub struct SchemePair(Rc<RefCell<(SchemeType, SchemeType)>>);
@@ -38,9 +38,8 @@ impl Display for SchemePair {
 
             if let Ok(item) = item_or_err {
                 item.fmt(f)?
-            } else if let Err(PairIterError::Improper((next_to_last, last))) = item_or_err {
-                write!(f, "{} . {}", next_to_last, last)?;
-                break;
+            } else if let Err(PairIterError::Improper(last)) = item_or_err {
+                write!(f, ". {}", last)?;
             } else {
                 return Err(fmt::Error);
             }
@@ -74,14 +73,17 @@ impl SchemePair {
 
     pub fn iter(&self) -> PairIter {
         PairIter {
-            pair: Some(self.clone()),
+            pair: self.clone().into(),
         }
     }
 
     pub fn len(&self) -> Result<usize, PairIterError> {
         let mut count = 0;
         for object in self.iter() {
-            object?;
+            match object {
+                Ok(_) | Err(PairIterError::Improper(_)) => (),
+                Err(err) => return Err(err)
+            }
             count += 1;
         }
         Ok(count)
@@ -89,47 +91,46 @@ impl SchemePair {
 }
 
 pub struct PairIter {
-    pair: Option<SchemePair>,
+    pair: SchemeType,
 }
 
 impl PairIter {
-    pub fn get_rest(&self) -> Option<SchemePair> {
-        self.pair.clone()
+    pub fn get_rest(&self) -> Result<Option<SchemePair>, PairIterError> {
+        let object = self.pair.clone();
+        match object {
+            SchemeType::Pair(pair) => Ok(Some(pair)),
+            SchemeType::EmptyList => Ok(None),
+            _ => Err(PairIterError::Improper(object)),
+        }
     }
 }
 
 #[derive(Debug)]
 pub enum PairIterError {
     Circular,
-    Improper((SchemeType, SchemeType)),
+    Improper(SchemeType),
 }
 
 impl Iterator for PairIter {
     type Item = Result<SchemeType, PairIterError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let pair = if let Some(ref pair) = self.pair {
-            pair.0.clone()
-        } else {
-            return None;
-        };
-        let pair_ref = RefCell::borrow(&pair);
-
-        Some(if let SchemeType::Pair(ref next) = pair_ref.1 {
-            self.pair = Some(next.clone());
-            Ok(pair_ref.0.clone())
-        } else if let SchemeType::EmptyList = pair_ref.1 {
-            self.pair = None;
-            Ok(pair_ref.0.clone())
-        } else {
-            Err(PairIterError::Improper((
-                pair_ref.0.clone(),
-                pair_ref.1.clone(),
-            )))
-        })
+        let object = self.pair.clone();
+        match object {
+            SchemeType::Pair(pair) => {
+                self.pair = pair.get_cdr();
+                Some(Ok(pair.get_car()))
+            }
+            SchemeType::EmptyList => None,
+            _ => {
+                self.pair = SchemeType::EmptyList;
+                Some(Err(PairIterError::Improper(object)))
+            }
+        }
     }
 }
 
+#[derive(Default, Clone, Debug)]
 pub struct ListFactory {
     head: Option<SchemePair>,
     tail: Option<SchemePair>,
@@ -137,11 +138,9 @@ pub struct ListFactory {
 
 impl ListFactory {
     pub fn new() -> Self {
-        Self {
-            head: None,
-            tail: None,
-        }
+        Self::default()
     }
+
     pub fn push(&mut self, object: SchemeType) {
         let new_tail = SchemePair::new(object, SchemeType::EmptyList);
         if let Some(ref tail) = self.tail {

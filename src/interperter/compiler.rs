@@ -18,8 +18,8 @@
 */
 
 use super::{SchemeFunction, Statement, StatementType};
-use std::collections::HashMap;
 use crate::types::*;
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct EnvironmentFrame {
@@ -181,10 +181,9 @@ pub fn compile_function(
                                 }
                             }
 
-                            if let Some(rest) = expr_iter.get_rest() {
+                            if let Some(rest) = expr_iter.get_rest()? {
                                 stack.push(CompilerAction::Compile { code: rest })
                             }
-
 
                             let (argc, argv) = match pair.get_cdr() {
                                 SchemeType::Pair(rest) => (rest.len()?, Some(rest)),
@@ -204,11 +203,8 @@ pub fn compile_function(
                             });
 
                             if let Some(arguments) = argv {
-                                stack.push(CompilerAction::Compile {
-                                    code: arguments
-                                });
+                                stack.push(CompilerAction::Compile { code: arguments });
                             }
-
 
                             continue 'stack_loop;
                         }

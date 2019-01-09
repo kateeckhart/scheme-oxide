@@ -17,9 +17,9 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use lazy_static::lazy_static;
 use regex::Regex;
 use std::io::{self, prelude::*};
-use lazy_static::lazy_static;
 
 #[cfg(test)]
 mod tests;

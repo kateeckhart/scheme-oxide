@@ -17,9 +17,9 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use crate::types::*;
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::types::*;
 
 mod compiler;
 pub use self::compiler::CompilerError;
@@ -156,7 +156,12 @@ enum FunctionRefInner {
 }
 
 impl FunctionRefInner {
-    fn call(self, stack: &mut Vec<StackFrame>, argc: u32, ret: &mut SchemeType) -> Result<(), RuntimeError> {
+    fn call(
+        self,
+        stack: &mut Vec<StackFrame>,
+        argc: u32,
+        ret: &mut SchemeType,
+    ) -> Result<(), RuntimeError> {
         match self {
             FunctionRefInner::Builtin(func) => func.call(stack, argc, ret),
             _ => unimplemented!(),
@@ -170,7 +175,12 @@ enum BuiltinFunction {
 }
 
 impl BuiltinFunction {
-    fn call(self, stack: &mut Vec<StackFrame>, argc: u32, ret: &mut SchemeType) -> Result<(), RuntimeError> {
+    fn call(
+        self,
+        stack: &mut Vec<StackFrame>,
+        argc: u32,
+        ret: &mut SchemeType,
+    ) -> Result<(), RuntimeError> {
         let arg_stack = &mut stack.last_mut().unwrap().top.arg_stack;
         match self {
             BuiltinFunction::Add => {
