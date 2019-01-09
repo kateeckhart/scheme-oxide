@@ -138,6 +138,7 @@ pub fn eval(object: SchemePair) -> Result<SchemeType, RuntimeError> {
 pub enum RuntimeError {
     TypeError,
     EvalError(CompilerError),
+    ArgError,
 }
 
 impl From<CompilerError> for RuntimeError {
@@ -172,6 +173,7 @@ impl FunctionRefInner {
 #[derive(Debug, Copy, Clone)]
 enum BuiltinFunction {
     Add,
+    Sub,
 }
 
 impl BuiltinFunction {
@@ -182,18 +184,28 @@ impl BuiltinFunction {
         ret: &mut SchemeType,
     ) -> Result<(), RuntimeError> {
         let arg_stack = &mut stack.last_mut().unwrap().top.arg_stack;
+        let args_begin_index = arg_stack.len() - (argc as usize);
         match self {
             BuiltinFunction::Add => {
                 let mut sum = 0;
                 for _ in 0..argc {
                     let s_num = arg_stack.pop().unwrap();
-                    if let SchemeType::Number(num) = s_num {
-                        sum += num;
-                    } else {
-                        return Err(RuntimeError::TypeError);
-                    }
+                    sum += s_num.to_number()?
                 }
                 *ret = SchemeType::Number(sum)
+            }
+            BuiltinFunction::Sub => {
+                if argc == 1 {
+                    *ret = SchemeType::Number(-arg_stack.pop().unwrap().to_number()?)
+                } else if argc > 1 {
+                    let mut difference = arg_stack.pop().unwrap().to_number()?;
+                    for number in arg_stack.drain(args_begin_index..) {
+                        difference -= number.to_number()?
+                    }
+                    *ret = SchemeType::Number(difference)
+                } else {
+                    return Err(RuntimeError::ArgError);
+                }
             }
         }
         Ok(())
@@ -230,6 +242,7 @@ fn gen_scheme_environment() -> BaseEnvironment {
     let mut ret = BaseEnvironment::new();
 
     ret.push_builtin_function("+", BuiltinFunction::Add);
+    ret.push_builtin_function("-", BuiltinFunction::Sub);
     ret
 }
 

@@ -82,7 +82,7 @@ impl SchemePair {
         for object in self.iter() {
             match object {
                 Ok(_) | Err(PairIterError::Improper(_)) => (),
-                Err(err) => return Err(err)
+                Err(err) => return Err(err),
             }
             count += 1;
         }

@@ -44,7 +44,7 @@ fn transpose_option<T, E>(option: Option<Result<T, E>>) -> Result<Option<T>, E> 
 }
 
 fn main() {
-    let token_stream = r#"(+ (+ 1 1 1) 1 4 3)"#;
+    let token_stream = r#"(- (+ 1 1 1) 1 4 3)"#;
     let mut prog_factory = ListFactory::new();
     for object in DatumParser::new(io::Cursor::new(token_stream)) {
         prog_factory.push(object.unwrap())
