@@ -93,7 +93,7 @@ fn exec_top_function(
     let mut stack = vec![StackFrame {
         top: StackTop::new(env),
         statement_num: 0,
-        function: top.clone(),
+        function: top,
     }];
     let mut ret_expr = SchemeType::EmptyList;
     'exec_loop: while let Some(s_frame) = stack.pop() {

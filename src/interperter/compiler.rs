@@ -242,5 +242,5 @@ pub fn compile_function(
             }
         }
     }
-    return Ok(function.compiled_code);
+    Ok(function.compiled_code)
 }
