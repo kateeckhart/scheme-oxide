@@ -99,8 +99,7 @@ fn exec_top_function(
     'exec_loop: while let Some(s_frame) = stack.pop() {
         let mut frame = s_frame.top;
         let function = s_frame.function.clone();
-        let code_len = function.code.len();
-        let mut code_iter = function.code[s_frame.statement_num..code_len].iter();
+        let mut code_iter = function.code[s_frame.statement_num..].iter();
         if s_frame.statement_num > 0 {
             frame.arg_stack.push(ret_expr.clone())
         }
@@ -112,7 +111,7 @@ fn exec_top_function(
                     .arg_stack
                     .push(function.literals[arg as usize].clone()),
                 StatementType::Call => {
-                    let statement_num = code_len - code_iter.as_slice().len();
+                    let statement_num = function.code.len() - code_iter.as_slice().len();
                     let new_function = frame.arg_stack.pop().unwrap();
                     stack.push(StackFrame {
                         top: frame,
@@ -124,6 +123,7 @@ fn exec_top_function(
                 }
             }
         }
+        ret_expr = frame.arg_stack.pop().unwrap()
     }
     Ok(ret_expr)
 }
