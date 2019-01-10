@@ -198,8 +198,9 @@ impl BuiltinFunction {
                 if argc == 1 {
                     *ret = SchemeType::Number(-arg_stack.pop().unwrap().to_number()?)
                 } else if argc > 1 {
-                    let mut difference = arg_stack.pop().unwrap().to_number()?;
-                    for number in arg_stack.drain(args_begin_index..) {
+                    let mut drain = arg_stack.drain(args_begin_index..);
+                    let mut difference = drain.next().unwrap().to_number()?;
+                    for number in drain {
                         difference -= number.to_number()?
                     }
                     *ret = SchemeType::Number(difference)
