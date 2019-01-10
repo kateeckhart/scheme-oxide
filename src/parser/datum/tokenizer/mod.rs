@@ -56,7 +56,7 @@ fn gen_regex() -> Regex {
     let string_body = |id| format!(r#"(?P<{}Body>(?:[^"\\\n]|\\.)*)"#, id);
     let good_string = format!(r#"(?:"{}")"#, string_body("goodString"));
     let bad_eof_string = format!(r#"(?:"{}\\?$)"#, string_body("badEofString"));
-    let number = format!("(?:(?P<number>[0-9]+){})", delimer("number"));
+    let number = format!(r"(?:(?P<number>(?:\+|-)?[0-9]+){})", delimer("number"));
     let block = r"(?P<block>\(|\))";
     let clipped = r"(?P<clipped>(?:\.{2}|#)$)";
     let regex_str = format!(
