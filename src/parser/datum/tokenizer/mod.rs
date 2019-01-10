@@ -58,7 +58,7 @@ fn gen_regex() -> Regex {
     let bad_eof_string = format!(r#"(?:"{}\\?$)"#, string_body("badEofString"));
     let number = format!(r"(?:(?P<number>(?:\+|-)?[0-9]+){})", delimer("number"));
     let block = r"(?P<block>\(|\))";
-    let clipped = r"(?P<clipped>(?:\.{2}|#)$)";
+    let clipped = r"(?P<clipped>(?:\.{1,2}|#)$)";
     let regex_str = format!(
         "^(?:{}|{}|{}|{}|(?P<whitespace>{}+)|{}|{})",
         number, symbol, good_string, block, whitespace, bad_eof_string, clipped
@@ -74,7 +74,7 @@ lazy_static! {
 enum InternalToken {
     PublicToken(Token),
     Whitespace,
-    EndOfFile(Option<Result<Token, TokenizerError>>),
+    EndOfFile(Option<Token>),
 }
 
 impl InternalToken {
@@ -195,7 +195,7 @@ where
                 Some((
                     token.end(),
                     if captures.name(&format!("{}EndOfFile", id)).is_some() {
-                        InternalToken::EndOfFile(Some(Ok(ret)))
+                        InternalToken::EndOfFile(Some(ret))
                     } else {
                         InternalToken::PublicToken(ret)
                     },
@@ -234,9 +234,7 @@ where
         } else if captures.name("badEofStringBody").is_some() {
             return Err(TokenizerError::UnexpectedEndOfFile);
         } else if captures.name("clipped").is_some() {
-            return Ok(InternalToken::EndOfFile(Some(Err(
-                TokenizerError::UnexpectedEndOfFile,
-            ))));
+            return Err(TokenizerError::UnexpectedEndOfFile);
         } else {
             InternalToken::PublicToken(if let Some(string) = captures.name("goodStringBody") {
                 Token::TString(string.as_str().to_string())
@@ -315,7 +313,7 @@ where
                     if let InternalToken::EndOfFile(None) = eof_or_token {
                         None
                     } else if let InternalToken::EndOfFile(Some(token)) = eof_or_token {
-                        Some(token)
+                        Some(Ok(token))
                     } else {
                         Some(Ok(eof_or_token.unwrap()))
                     }
