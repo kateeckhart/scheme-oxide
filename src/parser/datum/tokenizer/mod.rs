@@ -231,9 +231,8 @@ where
         } else if let Some(r) = handle_symbol_number("number", &captures, Token::Number) {
             end_of_token = r.0;
             r.1
-        } else if captures.name("badEofStringBody").is_some() {
-            return Err(TokenizerError::UnexpectedEndOfFile);
-        } else if captures.name("clipped").is_some() {
+        } else if captures.name("badEofStringBody").is_some() || captures.name("clipped").is_some()
+        {
             return Err(TokenizerError::UnexpectedEndOfFile);
         } else {
             InternalToken::PublicToken(if let Some(string) = captures.name("goodStringBody") {

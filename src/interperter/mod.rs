@@ -113,7 +113,10 @@ fn exec_top_function(
                 StatementType::Call => {
                     let statement_num = function.code.len() - code_iter.as_slice().len();
                     let new_function = frame.arg_stack.pop().unwrap();
-                    let args = frame.arg_stack.drain(frame.arg_stack.len() - (arg as usize)..).collect::<Vec<_>>();
+                    let args = frame
+                        .arg_stack
+                        .drain(frame.arg_stack.len() - (arg as usize)..)
+                        .collect::<Vec<_>>();
                     stack.push(StackFrame {
                         top: frame,
                         statement_num,
