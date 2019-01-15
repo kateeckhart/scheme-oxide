@@ -70,8 +70,8 @@ pub struct SchemeFunction {
 fn exec_function(
     object: SchemeType,
     stack: &mut Vec<StackFrame>,
-    argc: u32,
-    ret: &mut SchemeType,
+    args: &[SchemeType],
+    ret: &mut Option<SchemeType>,
 ) -> Result<(), RuntimeError> {
     let function;
     if let SchemeType::Function(func) = object {
@@ -80,7 +80,7 @@ fn exec_function(
         return Err(RuntimeError::TypeError);
     }
 
-    function.call(stack, argc, ret)
+    function.call(stack, args, ret)
 }
 
 fn exec_top_function(
@@ -95,13 +95,13 @@ fn exec_top_function(
         statement_num: 0,
         function: top,
     }];
-    let mut ret_expr = SchemeType::EmptyList;
+    let mut ret_expr = None;
     'exec_loop: while let Some(s_frame) = stack.pop() {
         let mut frame = s_frame.top;
         let function = s_frame.function.clone();
         let mut code_iter = function.code[s_frame.statement_num..].iter();
         if s_frame.statement_num > 0 {
-            frame.arg_stack.push(ret_expr.clone())
+            frame.arg_stack.push(ret_expr.take().unwrap())
         }
         while let Some(statement) = code_iter.next() {
             let arg = statement.arg;
@@ -113,19 +113,20 @@ fn exec_top_function(
                 StatementType::Call => {
                     let statement_num = function.code.len() - code_iter.as_slice().len();
                     let new_function = frame.arg_stack.pop().unwrap();
+                    let args = frame.arg_stack.drain(frame.arg_stack.len() - (arg as usize)..).collect::<Vec<_>>();
                     stack.push(StackFrame {
                         top: frame,
                         statement_num,
                         function: function.clone(),
                     });
-                    exec_function(new_function, &mut stack, arg, &mut ret_expr)?;
+                    exec_function(new_function, &mut stack, &args, &mut ret_expr)?;
                     continue 'exec_loop;
                 }
             }
         }
-        ret_expr = frame.arg_stack.pop().unwrap()
+        ret_expr = Some(frame.arg_stack.pop().unwrap())
     }
-    Ok(ret_expr)
+    Ok(ret_expr.unwrap())
 }
 
 pub fn eval(object: SchemePair) -> Result<SchemeType, RuntimeError> {
@@ -160,11 +161,11 @@ impl FunctionRefInner {
     fn call(
         self,
         stack: &mut Vec<StackFrame>,
-        argc: u32,
-        ret: &mut SchemeType,
+        args: &[SchemeType],
+        ret: &mut Option<SchemeType>,
     ) -> Result<(), RuntimeError> {
         match self {
-            FunctionRefInner::Builtin(func) => func.call(stack, argc, ret),
+            FunctionRefInner::Builtin(func) => func.call(stack, args, ret),
             _ => unimplemented!(),
         }
     }
@@ -180,35 +181,32 @@ impl BuiltinFunction {
     fn call(
         self,
         stack: &mut Vec<StackFrame>,
-        argc: u32,
-        ret: &mut SchemeType,
+        args: &[SchemeType],
+        ret: &mut Option<SchemeType>,
     ) -> Result<(), RuntimeError> {
-        let arg_stack = &mut stack.last_mut().unwrap().top.arg_stack;
-        let args_begin_index = arg_stack.len() - (argc as usize);
-        match self {
+        *ret = Some(match self {
             BuiltinFunction::Add => {
                 let mut sum = 0;
-                for _ in 0..argc {
-                    let s_num = arg_stack.pop().unwrap();
-                    sum += s_num.to_number()?
+                for num in args {
+                    sum += num.to_number()?
                 }
-                *ret = SchemeType::Number(sum)
+                SchemeType::Number(sum)
             }
             BuiltinFunction::Sub => {
-                if argc == 1 {
-                    *ret = SchemeType::Number(-arg_stack.pop().unwrap().to_number()?)
-                } else if argc > 1 {
-                    let mut drain = arg_stack.drain(args_begin_index..);
-                    let mut difference = drain.next().unwrap().to_number()?;
-                    for number in drain {
+                if args.len() == 1 {
+                    SchemeType::Number(-args[0].to_number()?)
+                } else if args.len() > 1 {
+                    let mut iter = args.iter();
+                    let mut difference = iter.next().unwrap().to_number()?;
+                    for number in iter {
                         difference -= number.to_number()?
                     }
-                    *ret = SchemeType::Number(difference)
+                    SchemeType::Number(difference)
                 } else {
                     return Err(RuntimeError::ArgError);
                 }
             }
-        }
+        });
         Ok(())
     }
 }

@@ -34,9 +34,9 @@ pub enum SchemeType {
 }
 
 impl SchemeType {
-    pub fn to_number(self) -> Result<i64, RuntimeError> {
+    pub fn to_number(&self) -> Result<i64, RuntimeError> {
         if let SchemeType::Number(num) = self {
-            Ok(num)
+            Ok(*num)
         } else {
             Err(RuntimeError::TypeError)
         }
