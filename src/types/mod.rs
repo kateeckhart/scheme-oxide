@@ -21,7 +21,7 @@ use std::fmt::{self, Display, Formatter};
 
 pub mod pair;
 pub use self::pair::SchemePair;
-use crate::interperter::{FunctionRef, RuntimeError};
+use crate::interperter::FunctionRef;
 
 #[derive(Clone, Debug)]
 pub enum SchemeType {
@@ -33,12 +33,14 @@ pub enum SchemeType {
     EmptyList,
 }
 
+pub struct CastError;
+
 impl SchemeType {
-    pub fn to_number(&self) -> Result<i64, RuntimeError> {
+    pub fn to_number(&self) -> Result<i64, CastError> {
         if let SchemeType::Number(num) = self {
             Ok(*num)
         } else {
-            Err(RuntimeError::TypeError)
+            Err(CastError)
         }
     }
 }

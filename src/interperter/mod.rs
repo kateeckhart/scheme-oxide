@@ -151,6 +151,12 @@ impl From<CompilerError> for RuntimeError {
     }
 }
 
+impl From<CastError> for RuntimeError {
+    fn from(_: CastError) -> RuntimeError {
+        RuntimeError::TypeError
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct FunctionRef(FunctionRefInner);
 
