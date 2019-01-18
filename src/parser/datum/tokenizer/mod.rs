@@ -36,6 +36,7 @@ pub enum Token {
     TString(String),
     Symbol(String),
     Number(String),
+    Bool(bool),
 }
 
 fn gen_regex() -> Regex {
@@ -58,10 +59,11 @@ fn gen_regex() -> Regex {
     let bad_eof_string = format!(r#"(?:"{}\\?$)"#, string_body("badEofString"));
     let number = format!(r"(?:(?P<number>(?:\+|-)?[0-9]+){})", delimer("number"));
     let block = r"(?P<block>\(|\))";
+    let boolean = "(?P<bool>#t|#f)";
     let clipped = r"(?P<clipped>(?:\.{1,2}|#)$)";
     let regex_str = format!(
-        "^(?:{}|{}|{}|{}|(?P<whitespace>{}+)|{}|{})",
-        number, symbol, good_string, block, whitespace, bad_eof_string, clipped
+        "^(?:{}|{}|{}|{}|(?P<whitespace>{}+)|{}|{}|{})",
+        number, symbol, good_string, block, whitespace, bad_eof_string, clipped, boolean
     );
 
     Regex::new(&regex_str).unwrap()
@@ -243,6 +245,15 @@ where
                     Token::Block(Block::Start)
                 } else if block_char == ")" {
                     Token::Block(Block::End)
+                } else {
+                    unreachable!()
+                }
+            } else if let Some(boolean) = captures.name("boolean") {
+                let bool_str = boolean.as_str();
+                if bool_str == "#t" {
+                    Token::Bool(true)
+                } else if bool_str == "#f" {
+                    Token::Bool(false)
                 } else {
                     unreachable!()
                 }

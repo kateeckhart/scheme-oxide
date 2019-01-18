@@ -31,6 +31,7 @@ pub enum SchemeType {
     String(String),
     Symbol(String),
     EmptyList,
+    Bool(bool),
 }
 
 pub struct CastError;
@@ -41,6 +42,13 @@ impl SchemeType {
             Ok(*num)
         } else {
             Err(CastError)
+        }
+    }
+
+    pub fn to_bool(&self) -> bool {
+        match self {
+            SchemeType::Bool(false) => false,
+            _ => true,
         }
     }
 }

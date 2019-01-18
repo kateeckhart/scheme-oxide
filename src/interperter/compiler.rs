@@ -86,7 +86,8 @@ struct PartialFunction {
 
 enum CompilerAction {
     Compile { code: SchemePair },
-    Call { argc: u32 },
+    EmitAsm { statements: Vec<Statement> },
+    PushBlock,
 }
 
 impl PartialFunction {
@@ -151,7 +152,7 @@ pub fn compile_function(
     base_environment: &EnvironmentFrame,
     code: SchemePair,
 ) -> Result<SchemeFunction, CompilerError> {
-    let mut stack = vec![CompilerAction::Compile { code }];
+    let mut stack = vec![CompilerAction::PushBlock, CompilerAction::Compile { code }];
 
     let mut function = PartialFunction {
         compiled_code: SchemeFunction {
@@ -164,6 +165,8 @@ pub fn compile_function(
         environment: base_environment.clone(),
         parent: None,
     };
+
+    let mut current_code_block = Vec::new();
 
     'stack_loop: while let Some(action) = stack.pop() {
         match action {
@@ -196,7 +199,11 @@ pub fn compile_function(
                                 _ => SchemePair::new(name_obj, SchemeType::EmptyList),
                             };
 
-                            stack.push(CompilerAction::Call { argc: argc as u32 });
+                            stack.push(CompilerAction::EmitAsm {
+                            statements: vec![Statement {
+                                s_type: StatementType::Call,
+                                arg: argc as u32
+                            }]});
 
                             stack.push(CompilerAction::Compile {
                                 code: function_name,
@@ -212,7 +219,7 @@ pub fn compile_function(
                             let ident_or_macro = function.lookup(&ident_name)?;
 
                             if let CompilerType::Runtime(ident) = ident_or_macro {
-                                function.compiled_code.code.push(Statement {
+                                current_code_block.push(Statement {
                                     s_type: StatementType::Get,
                                     arg: ident,
                                 })
@@ -221,7 +228,7 @@ pub fn compile_function(
                             }
                         }
                         _ => {
-                            function.compiled_code.code.push(Statement {
+                            current_code_block.push(Statement {
                                 s_type: StatementType::Literal,
                                 arg: function.compiled_code.literals.len() as u32,
                             });
@@ -230,11 +237,11 @@ pub fn compile_function(
                     }
                 }
             }
-            CompilerAction::Call { argc } => {
-                function.compiled_code.code.push(Statement {
-                    s_type: StatementType::Call,
-                    arg: argc,
-                });
+            CompilerAction::EmitAsm { mut statements } => {
+                current_code_block.append(&mut statements)
+            },
+            CompilerAction::PushBlock => {
+                function.compiled_code.code.append(&mut current_code_block)
             }
         }
     }
