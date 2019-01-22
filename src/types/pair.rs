@@ -53,6 +53,10 @@ impl SchemePair {
         SchemePair(Rc::new(RefCell::new((one, two))))
     }
 
+    pub fn one(object: SchemeType) -> Self {
+        SchemePair::new(object, SchemeType::EmptyList)
+    }
+
     pub fn get_car(&self) -> SchemeType {
         self.0.borrow().0.clone()
     }
@@ -142,7 +146,7 @@ impl ListFactory {
     }
 
     pub fn push(&mut self, object: SchemeType) {
-        let new_tail = SchemePair::new(object, SchemeType::EmptyList);
+        let new_tail = SchemePair::one(object);
         if let Some(ref tail) = self.tail {
             tail.set_cdr(new_tail.clone().into());
         } else {

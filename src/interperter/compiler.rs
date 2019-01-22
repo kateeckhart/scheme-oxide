@@ -20,6 +20,7 @@
 use super::{SchemeFunction, Statement, StatementType};
 use crate::types::*;
 use std::collections::HashMap;
+use std::mem::{replace, swap};
 
 #[derive(Clone)]
 pub struct EnvironmentFrame {
@@ -84,10 +85,12 @@ struct PartialFunction {
     parent: Option<Box<PartialFunction>>,
 }
 
+#[derive(Debug)]
 enum CompilerAction {
     Compile { code: SchemePair },
+    FunctionDone,
     EmitAsm { statements: Vec<Statement> },
-    PushBlock,
+    ExprDone,
 }
 
 impl PartialFunction {
@@ -148,20 +151,21 @@ impl PartialFunction {
     }
 }
 
+fn to_statement_list(object: SchemeType) -> SchemePair {
+    match object {
+        SchemeType::Pair(ret) => ret,
+        _ => SchemePair::one(object)
+    }
+}
+
 pub fn compile_function(
     base_environment: &EnvironmentFrame,
     code: SchemePair,
 ) -> Result<SchemeFunction, CompilerError> {
-    let mut stack = vec![CompilerAction::PushBlock, CompilerAction::Compile { code }];
+    let mut stack = vec![CompilerAction::FunctionDone, CompilerAction::ExprDone, CompilerAction::Compile { code }];
 
     let mut function = PartialFunction {
-        compiled_code: SchemeFunction {
-            args: 0,
-            is_vargs: false,
-            captures: Vec::new(),
-            code: Vec::new(),
-            literals: Vec::new(),
-        },
+        compiled_code: SchemeFunction::default(),
         environment: base_environment.clone(),
         parent: None,
     };
@@ -193,11 +197,7 @@ pub fn compile_function(
                                 SchemeType::EmptyList => (0, None),
                                 _ => return Err(CompilerError::SyntaxError),
                             };
-                            let name_obj = pair.get_car();
-                            let function_name = match name_obj {
-                                SchemeType::Pair(expr) => expr,
-                                _ => SchemePair::new(name_obj, SchemeType::EmptyList),
-                            };
+                            let function_name = SchemePair::one(pair.get_car());
 
                             stack.push(CompilerAction::EmitAsm {
                             statements: vec![Statement {
@@ -238,11 +238,31 @@ pub fn compile_function(
                 }
             }
             CompilerAction::EmitAsm { mut statements } => {
-                current_code_block.append(&mut statements)
+                let next = stack.pop().unwrap();
+                match next {
+                    CompilerAction::EmitAsm { statements: mut statements_2} => { 
+                        statements_2.append(&mut statements);
+                        stack.push(CompilerAction::EmitAsm { statements: statements_2 })
+                    },
+                    CompilerAction::FunctionDone => {
+                       swap(&mut function.compiled_code.code, &mut statements);
+                       if let Some(parent) = function.parent {
+                           function = *parent;
+                       } else {
+                           break 'stack_loop
+                       }
+                    }
+                    _ => {
+                        current_code_block.append(&mut statements);
+                        stack.push(next)
+                    }
+                }
             },
-            CompilerAction::PushBlock => {
-                function.compiled_code.code.append(&mut current_code_block)
+            CompilerAction::ExprDone => {
+                let expr_list = replace(&mut current_code_block, Vec::new());
+                stack.push(CompilerAction::EmitAsm { statements: expr_list} )
             }
+            _ => unreachable!() 
         }
     }
     Ok(function.compiled_code)

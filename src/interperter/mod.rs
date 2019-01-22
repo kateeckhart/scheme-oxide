@@ -58,7 +58,7 @@ struct StackFrame {
     function: Rc<SchemeFunction>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SchemeFunction {
     args: u32,
     is_vargs: bool,
