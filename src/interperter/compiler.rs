@@ -20,7 +20,7 @@
 use super::{SchemeFunction, Statement, StatementType};
 use crate::types::*;
 use std::collections::HashMap;
-use std::mem::{replace, swap};
+use std::mem::replace;
 
 #[derive(Clone)]
 pub struct EnvironmentFrame {
@@ -151,18 +151,15 @@ impl PartialFunction {
     }
 }
 
-fn to_statement_list(object: SchemeType) -> SchemePair {
-    match object {
-        SchemeType::Pair(ret) => ret,
-        _ => SchemePair::one(object)
-    }
-}
-
 pub fn compile_function(
     base_environment: &EnvironmentFrame,
     code: SchemePair,
 ) -> Result<SchemeFunction, CompilerError> {
-    let mut stack = vec![CompilerAction::FunctionDone, CompilerAction::ExprDone, CompilerAction::Compile { code }];
+    let mut stack = vec![
+        CompilerAction::FunctionDone,
+        CompilerAction::ExprDone,
+        CompilerAction::Compile { code },
+    ];
 
     let mut function = PartialFunction {
         compiled_code: SchemeFunction::default(),
@@ -200,10 +197,11 @@ pub fn compile_function(
                             let function_name = SchemePair::one(pair.get_car());
 
                             stack.push(CompilerAction::EmitAsm {
-                            statements: vec![Statement {
-                                s_type: StatementType::Call,
-                                arg: argc as u32
-                            }]});
+                                statements: vec![Statement {
+                                    s_type: StatementType::Call,
+                                    arg: argc as u32,
+                                }],
+                            });
 
                             stack.push(CompilerAction::Compile {
                                 code: function_name,
@@ -238,31 +236,23 @@ pub fn compile_function(
                 }
             }
             CompilerAction::EmitAsm { mut statements } => {
-                let next = stack.pop().unwrap();
-                match next {
-                    CompilerAction::EmitAsm { statements: mut statements_2} => { 
-                        statements_2.append(&mut statements);
-                        stack.push(CompilerAction::EmitAsm { statements: statements_2 })
-                    },
-                    CompilerAction::FunctionDone => {
-                       swap(&mut function.compiled_code.code, &mut statements);
-                       if let Some(parent) = function.parent {
-                           function = *parent;
-                       } else {
-                           break 'stack_loop
-                       }
-                    }
-                    _ => {
-                        current_code_block.append(&mut statements);
-                        stack.push(next)
-                    }
-                }
-            },
+                current_code_block.append(&mut statements);
+            }
             CompilerAction::ExprDone => {
                 let expr_list = replace(&mut current_code_block, Vec::new());
-                stack.push(CompilerAction::EmitAsm { statements: expr_list} )
+                stack.push(CompilerAction::EmitAsm {
+                    statements: expr_list,
+                })
             }
-            _ => unreachable!() 
+            CompilerAction::FunctionDone => {
+                replace(&mut function.compiled_code.code, current_code_block);
+                current_code_block = Vec::new();
+                if let Some(parent) = function.parent {
+                    function = *parent;
+                } else {
+                    break 'stack_loop;
+                }
+            }
         }
     }
     Ok(function.compiled_code)

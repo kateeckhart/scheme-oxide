@@ -40,10 +40,8 @@ impl ParserToken {
             Token::Symbol(symbol) => ParserToken::Datum(SchemeType::Symbol(symbol)),
             Token::Number(num) => {
                 ParserToken::Datum(SchemeType::Number(i64::from_str_radix(&num, 10)?))
-            },
-            Token::Bool(boolean) => {
-                ParserToken::Datum(SchemeType::Bool(boolean))
             }
+            Token::Bool(boolean) => ParserToken::Datum(SchemeType::Bool(boolean)),
         })
     }
 }
