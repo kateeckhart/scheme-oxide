@@ -20,7 +20,7 @@
 use std::io;
 
 mod parser;
-use crate::parser::datum::DatumParser;
+use crate::parser::Parser;
 mod types;
 use crate::types::pair::ListFactory;
 
@@ -46,7 +46,7 @@ fn transpose_option<T, E>(option: Option<Result<T, E>>) -> Result<Option<T>, E> 
 fn main() {
     let token_stream = r#"(- (- 1 1 1) 1 4 +7 -3)"#;
     let mut prog_factory = ListFactory::new();
-    for object in DatumParser::new(io::Cursor::new(token_stream)) {
+    for object in Parser::new(io::Cursor::new(token_stream)) {
         prog_factory.push(object.unwrap())
     }
     let prog = prog_factory.build().unwrap();
