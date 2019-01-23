@@ -19,6 +19,7 @@
 
 use crate::types::*;
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::rc::Rc;
 
 mod compiler;
@@ -184,6 +185,7 @@ impl FunctionRefInner {
 enum BuiltinFunction {
     Add,
     Sub,
+    Compare { or_equal: bool, mode: Ordering },
 }
 
 impl BuiltinFunction {
@@ -214,6 +216,24 @@ impl BuiltinFunction {
                 } else {
                     return Err(RuntimeError::ArgError);
                 }
+            }
+            BuiltinFunction::Compare { or_equal, mode } => {
+                if args.len() < 2 {
+                    return Err(RuntimeError::ArgError);
+                }
+                let mut iter = args.iter();
+                let mut current = iter.next().unwrap().to_number()?;
+                let mut ret = SchemeType::Bool(true);
+                for raw_num in iter {
+                    let num = raw_num.to_number()?;
+                    let res = current.cmp(&num);
+                    if !((res == mode) || (res == Ordering::Equal && or_equal)) {
+                        ret = SchemeType::Bool(false);
+                        break;
+                    }
+                    current = num;
+                }
+                ret
             }
         });
         Ok(())
@@ -251,6 +271,43 @@ fn gen_scheme_environment() -> BaseEnvironment {
 
     ret.push_builtin_function("+", BuiltinFunction::Add);
     ret.push_builtin_function("-", BuiltinFunction::Sub);
+
+    ret.push_builtin_function(
+        "=",
+        BuiltinFunction::Compare {
+            or_equal: false,
+            mode: Ordering::Equal,
+        },
+    );
+    ret.push_builtin_function(
+        "<",
+        BuiltinFunction::Compare {
+            or_equal: false,
+            mode: Ordering::Less,
+        },
+    );
+    ret.push_builtin_function(
+        "<=",
+        BuiltinFunction::Compare {
+            or_equal: true,
+            mode: Ordering::Less,
+        },
+    );
+    ret.push_builtin_function(
+        ">",
+        BuiltinFunction::Compare {
+            or_equal: false,
+            mode: Ordering::Greater,
+        },
+    );
+    ret.push_builtin_function(
+        ">=",
+        BuiltinFunction::Compare {
+            or_equal: true,
+            mode: Ordering::Greater,
+        },
+    );
+
     ret
 }
 
