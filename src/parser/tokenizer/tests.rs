@@ -17,14 +17,15 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use super::{Token, Tokenizer, TokenizerError, BUFFER_SIZE};
+use super::{Block, Token, Tokenizer, TokenizerError, BUFFER_SIZE};
 use std::io::Cursor;
 
 fn cutoff_string(long_string: &str) {
     let mut tokenizer = Tokenizer::new(Cursor::new(format!(
-        r#""{}""{}""#,
+        r#"("{}""{}""#,
         long_string, long_string
     )));
+    assert_eq!(tokenizer.next().unwrap().unwrap(), Token::Block(Block::Start));
     for _ in 0..2 {
         let token = tokenizer.next().unwrap().unwrap();
         assert_eq!(token, Token::TString(long_string.to_string()));
