@@ -34,6 +34,7 @@ pub enum SchemeType {
     Bool(bool),
 }
 
+#[derive(Clone, Debug)]
 pub struct CastError;
 
 impl SchemeType {
