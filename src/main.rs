@@ -26,6 +26,9 @@ use crate::types::pair::ListFactory;
 
 mod interperter;
 
+#[cfg(test)]
+mod tests;
+
 //Transpose pollyfill
 fn transpose_result<T, E>(result: Result<Option<T>, E>) -> Option<Result<T, E>> {
     match result {
