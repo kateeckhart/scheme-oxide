@@ -185,7 +185,7 @@ impl FunctionRefInner {
 enum BuiltinFunction {
     Add,
     Sub,
-    Compare { or_equal: bool, mode: Ordering },
+    Compare { invert: bool, mode: Ordering },
 }
 
 impl BuiltinFunction {
@@ -217,7 +217,7 @@ impl BuiltinFunction {
                     return Err(RuntimeError::ArgError);
                 }
             }
-            BuiltinFunction::Compare { or_equal, mode } => {
+            BuiltinFunction::Compare { invert, mode } => {
                 if args.len() < 2 {
                     return Err(RuntimeError::ArgError);
                 }
@@ -227,7 +227,7 @@ impl BuiltinFunction {
                 for raw_num in iter {
                     let num = raw_num.to_number()?;
                     let res = current.cmp(&num);
-                    if !((res == mode) || (res == Ordering::Equal && or_equal)) {
+                    if (res == mode) == invert {
                         ret = SchemeType::Bool(false);
                         break;
                     }
@@ -275,36 +275,36 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_builtin_function(
         "=",
         BuiltinFunction::Compare {
-            or_equal: false,
+            invert: false,
             mode: Ordering::Equal,
         },
     );
     ret.push_builtin_function(
         "<",
         BuiltinFunction::Compare {
-            or_equal: false,
+            invert: false,
             mode: Ordering::Less,
         },
     );
     ret.push_builtin_function(
         "<=",
         BuiltinFunction::Compare {
-            or_equal: true,
-            mode: Ordering::Less,
+            invert: true,
+            mode: Ordering::Greater,
         },
     );
     ret.push_builtin_function(
         ">",
         BuiltinFunction::Compare {
-            or_equal: false,
+            invert: false,
             mode: Ordering::Greater,
         },
     );
     ret.push_builtin_function(
         ">=",
         BuiltinFunction::Compare {
-            or_equal: true,
-            mode: Ordering::Greater,
+            invert: true,
+            mode: Ordering::Less,
         },
     );
 
