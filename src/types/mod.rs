@@ -46,6 +46,14 @@ impl SchemeType {
         }
     }
 
+    pub fn to_symbol(&self) -> Result<String, CastError> {
+        if let SchemeType::Symbol(sym) = self {
+            Ok(sym.to_string())
+        } else {
+            Err(CastError)
+        }
+    }
+
     pub fn to_bool(&self) -> bool {
         match self {
             SchemeType::Bool(false) => false,

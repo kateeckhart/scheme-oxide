@@ -68,6 +68,18 @@ pub struct SchemeFunction {
     literals: Vec<SchemeType>,
 }
 
+impl SchemeFunction {
+    fn new(argc: u32, is_vargs: bool) -> Self {
+        Self {
+            args: argc,
+            is_vargs,
+            captures: Vec::new(),
+            code: Vec::new(),
+            literals: Vec::new(),
+        }
+    }
+}
+
 fn exec_function(
     object: SchemeType,
     stack: &mut Vec<StackFrame>,
@@ -268,6 +280,8 @@ impl BaseEnvironment {
 
 fn gen_scheme_environment() -> BaseEnvironment {
     let mut ret = BaseEnvironment::new();
+
+    ret.frame.add_builtin_macros();
 
     ret.push_builtin_function("+", BuiltinFunction::Add);
     ret.push_builtin_function("-", BuiltinFunction::Sub);

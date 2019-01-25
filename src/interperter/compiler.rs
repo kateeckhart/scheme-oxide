@@ -48,6 +48,10 @@ impl EnvironmentFrame {
         id
     }
 
+    pub fn add_builtin_macros(&mut self) {
+        self.push_macro("lamada", SchemeMacro::Builtin(BuiltinMacro::Lamada))
+    }
+
     fn push_macro(&mut self, name: &str, s_macro: SchemeMacro) {
         self.map.insert(name.into(), CompilerType::Macro(s_macro));
     }
@@ -77,7 +81,60 @@ impl From<pair::PairIterError> for CompilerError {
 }
 
 #[derive(Clone)]
-pub enum SchemeMacro {}
+enum SchemeMacro {
+    Builtin(BuiltinMacro)
+}
+
+impl SchemeMacro {
+    fn expand(&self, args: NullableSchemePair, function: &mut PartialFunction) -> Result<Vec<CompilerAction>, CompilerError> {
+        match self {
+            SchemeMacro::Builtin(s_macro) => s_macro.expand(args, function),
+        }
+    }
+}
+
+#[derive(Clone)]
+enum BuiltinMacro {
+    Lamada,
+}
+
+impl BuiltinMacro {
+    fn expand(&self, in_args: NullableSchemePair, function: &mut PartialFunction) -> Result<Vec<CompilerAction>, CompilerError> {
+        match self {
+            BuiltinMacro::Lamada => {
+                let args = if let Some(a) = in_args.into_option() {
+                    a
+                } else {
+                    return Err(CompilerError::SyntaxError)
+                };
+
+                let raw_formals = args.get_car().to_nullable_pair()?;
+                let mut environment = EnvironmentFrame::new();
+
+                for raw_formal in raw_formals.iter() {
+                    environment.new_object(&raw_formal?.to_symbol()?);
+                }
+
+                let code_or_none = args.get_cdr().to_nullable_pair()?;
+
+                let parent = replace(function, PartialFunction {
+                    compiled_code: SchemeFunction::new(raw_formals.len()? as u32, false),
+                    environment,
+                    parent: None,
+                });
+
+                function.parent = Some(Box::new(parent));
+
+                Ok(if let Some(code) = code_or_none.into_option() {
+                    vec![CompilerAction::Compile {code}]
+                } else {
+                    Vec::new()
+                })
+            }
+
+        }
+    }
+}
 
 #[derive(Clone)]
 enum CompilerType {
@@ -89,14 +146,6 @@ struct PartialFunction {
     compiled_code: SchemeFunction,
     environment: EnvironmentFrame,
     parent: Option<Box<PartialFunction>>,
-}
-
-#[derive(Debug)]
-enum CompilerAction {
-    Compile { code: SchemePair },
-    FunctionDone,
-    EmitAsm { statements: Vec<Statement> },
-    ExprDone,
 }
 
 impl PartialFunction {
@@ -157,6 +206,14 @@ impl PartialFunction {
     }
 }
 
+#[derive(Debug)]
+enum CompilerAction {
+    Compile { code: SchemePair },
+    FunctionDone,
+    EmitAsm { statements: Vec<Statement> },
+    ExprDone,
+}
+
 pub fn compile_function(
     base_environment: &EnvironmentFrame,
     code: SchemePair,
@@ -182,19 +239,20 @@ pub fn compile_function(
                     let expr = expr_or_err?;
                     match expr {
                         SchemeType::Pair(pair) => {
-                            let function_object = pair.get_car();
-                            if let SchemeType::Symbol(function_name) = function_object {
-                                let calling_function = function.lookup(&function_name)?;
-                                if let CompilerType::Macro(_) = calling_function {
-                                    unimplemented!()
-                                }
-                            }
-
                             if let Some(rest) = expr_iter.get_rest()? {
                                 stack.push(CompilerAction::Compile { code: rest })
                             }
 
+                            let function_object = pair.get_car();
                             let argv = pair.get_cdr().to_nullable_pair()?;
+                            if let SchemeType::Symbol(function_name) = function_object {
+                                let calling_function = function.lookup(&function_name)?;
+                                if let CompilerType::Macro(s_macro) = calling_function {
+                                    stack.append(&mut s_macro.expand(argv, &mut function)?);
+                                    continue 'stack_loop
+                                }
+                            }
+
                             let argc = argv.len()?;
 
                             let function_name = SchemePair::one(pair.get_car());
