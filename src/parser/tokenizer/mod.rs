@@ -184,7 +184,7 @@ where
     }
 
     fn gen_token(&mut self) -> Result<InternalToken, TokenizerError> {
-        fn handle_symbol_number<'a, T>(
+        fn handle_delimered_token<'a, T>(
             id: &'static str,
             captures: &regex::Captures<'a>,
             constructor: T,
@@ -227,10 +227,10 @@ where
 
         let ret = if captures.name("whitespace").is_some() {
             InternalToken::Whitespace
-        } else if let Some(r) = handle_symbol_number("symbol", &captures, Token::Symbol) {
+        } else if let Some(r) = handle_delimered_token("symbol", &captures, Token::Symbol) {
             end_of_token = r.0;
             r.1
-        } else if let Some(r) = handle_symbol_number("number", &captures, Token::Number) {
+        } else if let Some(r) = handle_delimered_token("number", &captures, Token::Number) {
             end_of_token = r.0;
             r.1
         } else if captures.name("badEofStringBody").is_some() || captures.name("clipped").is_some()
