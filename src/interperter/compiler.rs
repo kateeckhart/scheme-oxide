@@ -64,6 +64,12 @@ pub enum CompilerError {
     BadList,
 }
 
+impl From<CastError> for CompilerError {
+    fn from(_: CastError) -> Self {
+        CompilerError::SyntaxError
+    }
+}
+
 impl From<pair::PairIterError> for CompilerError {
     fn from(_: pair::PairIterError) -> Self {
         CompilerError::BadList
@@ -188,11 +194,9 @@ pub fn compile_function(
                                 stack.push(CompilerAction::Compile { code: rest })
                             }
 
-                            let (argc, argv) = match pair.get_cdr() {
-                                SchemeType::Pair(rest) => (rest.len()?, Some(rest)),
-                                SchemeType::EmptyList => (0, None),
-                                _ => return Err(CompilerError::SyntaxError),
-                            };
+                            let argv = pair.get_cdr().to_nullable_pair()?;
+                            let argc = argv.len()?;
+
                             let function_name = SchemePair::one(pair.get_car());
 
                             stack.push(CompilerAction::EmitAsm {
@@ -206,7 +210,7 @@ pub fn compile_function(
                                 code: function_name,
                             });
 
-                            if let Some(arguments) = argv {
+                            if let Some(arguments) = argv.into_option() {
                                 stack.push(CompilerAction::Compile { code: arguments });
                             }
 
