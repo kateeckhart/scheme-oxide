@@ -25,7 +25,10 @@ fn cutoff_string(long_string: &str) {
         r#"("{}""{}""#,
         long_string, long_string
     )));
-    assert_eq!(tokenizer.next().unwrap().unwrap(), Token::Block(Block::Start));
+    assert_eq!(
+        tokenizer.next().unwrap().unwrap(),
+        Token::Block(Block::Start)
+    );
     for _ in 0..2 {
         let token = tokenizer.next().unwrap().unwrap();
         assert_eq!(token, Token::TString(long_string.to_string()));

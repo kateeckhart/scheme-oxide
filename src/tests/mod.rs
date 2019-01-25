@@ -19,9 +19,9 @@
 
 use std::io;
 
+use crate::interperter::{self, RuntimeError};
 use crate::parser::Parser;
 use crate::types::pair::ListFactory;
-use crate::interperter::{self, RuntimeError};
 use crate::types::*;
 
 fn eval_string(token_stream: &str) -> Result<SchemeType, RuntimeError> {
@@ -42,7 +42,10 @@ fn add_zero() {
 #[test]
 fn add_one() {
     for x in 0..256 {
-        let res = eval_string(&format!("(+ {})", x)).unwrap().to_number().unwrap();
+        let res = eval_string(&format!("(+ {})", x))
+            .unwrap()
+            .to_number()
+            .unwrap();
         assert_eq!(x, res);
     }
 }
@@ -51,7 +54,10 @@ fn add_one() {
 fn add_two() {
     for x in 0..256 {
         for y in 0..256 {
-            let res = eval_string(&format!("(+ {} {})", x, y)).unwrap().to_number().unwrap();
+            let res = eval_string(&format!("(+ {} {})", x, y))
+                .unwrap()
+                .to_number()
+                .unwrap();
             assert_eq!(x + y, res);
         }
     }
@@ -62,7 +68,10 @@ fn add_three() {
     for x in 0..50 {
         for y in 0..50 {
             for z in 0..50 {
-                let res = eval_string(&format!("(+ {} {} {})", x, y, z)).unwrap().to_number().unwrap();
+                let res = eval_string(&format!("(+ {} {} {})", x, y, z))
+                    .unwrap()
+                    .to_number()
+                    .unwrap();
                 assert_eq!(x + y + z, res);
             }
         }
