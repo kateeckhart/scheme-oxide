@@ -20,7 +20,7 @@
 use std::fmt::{self, Display, Formatter};
 
 pub mod pair;
-pub use self::pair::SchemePair;
+pub use self::pair::{NullableSchemePair, SchemePair};
 use crate::interperter::FunctionRef;
 
 #[derive(Clone, Debug)]
@@ -51,6 +51,14 @@ impl SchemeType {
             SchemeType::Bool(false) => false,
             _ => true,
         }
+    }
+
+    pub fn to_nullable_pair(&self) -> Result<NullableSchemePair, CastError> {
+        Ok(match self {
+            SchemeType::Pair(ret) => ret.clone().into(),
+            SchemeType::EmptyList => NullableSchemePair::new(),
+            _ => return Err(CastError),
+        })
     }
 }
 
@@ -84,9 +92,9 @@ impl From<SchemePair> for SchemeType {
     }
 }
 
-impl From<Option<SchemePair>> for SchemeType {
-    fn from(pair: Option<SchemePair>) -> SchemeType {
-        match pair {
+impl From<NullableSchemePair> for SchemeType {
+    fn from(pair: NullableSchemePair) -> SchemeType {
+        match pair.into_option() {
             None => SchemeType::EmptyList,
             Some(contents) => SchemeType::Pair(contents),
         }

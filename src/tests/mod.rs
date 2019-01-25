@@ -29,7 +29,7 @@ fn eval_string(token_stream: &str) -> Result<SchemeType, RuntimeError> {
     for object in Parser::new(io::Cursor::new(token_stream)) {
         prog_factory.push(object.unwrap())
     }
-    let prog = prog_factory.build().unwrap();
+    let prog = prog_factory.build().into_option().unwrap();
     interperter::eval(prog)
 }
 

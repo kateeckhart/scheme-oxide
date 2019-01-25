@@ -94,6 +94,45 @@ impl SchemePair {
     }
 }
 
+#[derive(Clone)]
+pub struct NullableSchemePair(Option<SchemePair>);
+
+impl NullableSchemePair {
+    pub fn new() -> Self {
+        Self(None)
+    }
+
+    pub fn into_option(self) -> Option<SchemePair> {
+        self.0
+    }
+
+    pub fn iter(&self) -> PairIter {
+        PairIter {
+            pair: self.clone().into(),
+        }
+    }
+
+    pub fn len(&self) -> Result<usize, PairIterError> {
+        if let Some(pair) = &self.0 {
+            pair.len()
+        } else {
+            Ok(0)
+        }
+    }
+}
+
+impl From<SchemePair> for NullableSchemePair {
+    fn from(pair: SchemePair) -> Self {
+        Self(Some(pair))
+    }
+}
+
+impl From<Option<SchemePair>> for NullableSchemePair {
+    fn from(pair: Option<SchemePair>) -> Self {
+        Self(pair)
+    }
+}
+
 pub struct PairIter {
     pair: SchemeType,
 }
@@ -155,7 +194,7 @@ impl ListFactory {
         self.tail = Some(new_tail);
     }
 
-    pub fn build(self) -> Option<SchemePair> {
-        self.head
+    pub fn build(self) -> NullableSchemePair {
+        self.head.into()
     }
 }
