@@ -278,65 +278,67 @@ where
     type Item = Result<Token, TokenizerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // Grab another token if its whitespace
-        let mut unchecked_token = self.gen_token();
-        let mut can_ignore = true;
-        while can_ignore {
-            if let Ok(token) = unchecked_token {
-                if token.can_ignore() {
-                    unchecked_token = self.gen_token();
-                    continue;
-                } else {
-                    unchecked_token = Ok(token);
-                }
-            }
-            can_ignore = false;
-        }
-
-        let is_eof = if let Ok(InternalToken::EndOfFile(_)) = unchecked_token {
-            true
-        } else if let Err(TokenizerError::UnexpectedEndOfFile) = unchecked_token {
-            true
-        } else {
-            false
-        };
-
-        if is_eof {
-            let status = self.refill_buffer();
-            let end_of_file;
-            if let Ok(eof) = status {
-                end_of_file = eof;
-            } else {
-                return Some(Err(status.unwrap_err()));
-            }
-
-            if end_of_file {
-                if self.last_codepoint != self.end {
-                    return Some(Err(TokenizerError::Utf8Error));
-                }
-
-                // Clear buffer for eof
-                self.start = 0;
-                self.last_codepoint = 0;
-                self.end = 0;
-                if let Ok(eof_or_token) = unchecked_token {
-                    if let InternalToken::EndOfFile(None) = eof_or_token {
-                        None
-                    } else if let InternalToken::EndOfFile(Some(token)) = eof_or_token {
-                        Some(Ok(token))
+        loop {
+            // Grab another token if its whitespace
+            let mut unchecked_token = self.gen_token();
+            let mut can_ignore = true;
+            while can_ignore {
+                if let Ok(token) = unchecked_token {
+                    if token.can_ignore() {
+                        unchecked_token = self.gen_token();
+                        continue;
                     } else {
-                        Some(Ok(eof_or_token.unwrap()))
+                        unchecked_token = Ok(token);
                     }
-                } else if let Err(err) = unchecked_token {
-                    Some(Err(err))
+                }
+                can_ignore = false;
+            }
+
+            let is_eof = if let Ok(InternalToken::EndOfFile(_)) = unchecked_token {
+                true
+            } else if let Err(TokenizerError::UnexpectedEndOfFile) = unchecked_token {
+                true
+            } else {
+                false
+            };
+
+            return if is_eof {
+                let status = self.refill_buffer();
+                let end_of_file;
+                if let Ok(eof) = status {
+                    end_of_file = eof;
                 } else {
-                    unreachable!()
+                    return Some(Err(status.unwrap_err()));
+                }
+
+                if end_of_file {
+                    if self.last_codepoint != self.end {
+                        return Some(Err(TokenizerError::Utf8Error));
+                    }
+
+                    // Clear buffer for eof
+                    self.start = 0;
+                    self.last_codepoint = 0;
+                    self.end = 0;
+                    if let Ok(eof_or_token) = unchecked_token {
+                        if let InternalToken::EndOfFile(None) = eof_or_token {
+                            None
+                        } else if let InternalToken::EndOfFile(Some(token)) = eof_or_token {
+                            Some(Ok(token))
+                        } else {
+                            Some(Ok(eof_or_token.unwrap()))
+                        }
+                    } else if let Err(err) = unchecked_token {
+                        Some(Err(err))
+                    } else {
+                        unreachable!()
+                    }
+                } else {
+                    continue;
                 }
             } else {
-                self.next()
-            }
-        } else {
-            Some(unchecked_token.map(InternalToken::unwrap))
+                Some(unchecked_token.map(InternalToken::unwrap))
+            };
         }
     }
 }
