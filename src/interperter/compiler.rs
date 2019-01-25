@@ -157,7 +157,6 @@ pub fn compile_function(
 ) -> Result<SchemeFunction, CompilerError> {
     let mut stack = vec![
         CompilerAction::FunctionDone,
-        CompilerAction::ExprDone,
         CompilerAction::Compile { code },
     ];
 
