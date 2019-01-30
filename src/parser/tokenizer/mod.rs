@@ -40,27 +40,39 @@ pub enum Token {
 }
 
 fn gen_regex() -> Regex {
-    let special_inital = "[!$%&*/:<=>?^_~]";
-    let odd_symbol = r"(?:[+-]|\.{3})";
     let whitespace = "(?:[[:space:]])";
+
+    //Mini function that returns a regex matching delimers/end of file
+    //Id is a prefix to the EndOfFile capture group
     let delimer = |id| format!(r#"(?:{}|[()";]|(?P<{}EndOfFile>$))"#, whitespace, id);
+
+    let special_inital = "[!$%&*/:<=>?^_~]";
     let special_subsequent = r"[+.@-]";
     let inital = format!("(?:[[:alpha:]]|{})", special_inital);
     let subsequent = format!("(?:[0-9]|{}|{})", inital, special_subsequent);
     let normal_symbol = format!("(?:{}{}*)", inital, subsequent);
+
+    let odd_symbol = r"(?:[+-]|\.{3})";
     let symbol = format!(
         "(?:(?P<symbol>{}|{}){})",
         normal_symbol,
         odd_symbol,
         delimer("symbol")
     );
+
     let string_body = |id| format!(r#"(?P<{}Body>(?:[^"\\\n]|\\.)*)"#, id);
     let good_string = format!(r#"(?:"{}")"#, string_body("goodString"));
     let bad_eof_string = format!(r#"(?:"{}\\?$)"#, string_body("badEofString"));
+
     let number = format!(r"(?:(?P<number>(?:\+|-)?[0-9]+){})", delimer("number"));
+
     let block = r"(?P<block>\(|\))";
+
     let boolean = "(?P<bool>#t|#f)";
+
+    //Matches any multi character
     let clipped = r"(?P<clipped>(?:\.{1,2}|#)$)";
+
     let regex_str = format!(
         "^(?:{}|{}|{}|{}|(?P<whitespace>{}+)|{}|{}|{})",
         number, symbol, good_string, block, whitespace, bad_eof_string, clipped, boolean
@@ -73,6 +85,7 @@ lazy_static! {
     static ref REGEX: Regex = gen_regex();
 }
 
+//Type used to store more information about each token then is exposed
 enum InternalToken {
     PublicToken(Token),
     Whitespace,
@@ -126,9 +139,9 @@ where
     F: Read,
 {
     buffer: Vec<u8>,
-    start: usize,
-    last_codepoint: usize,
-    end: usize,
+    start: usize,          //Byte offset that a new token starts
+    last_codepoint: usize, //End of buffer minus the last partial codepoint.
+    end: usize,            //End of buffer
     file: F,
 }
 
@@ -157,13 +170,17 @@ where
         for _ in 0..drained {
             self.buffer.push(0)
         }
+        //Update pointers to point to start of token
         self.start -= drained;
         self.end -= drained;
         self.last_codepoint -= drained;
 
+        //Handle when a token threatens to overflow the buffer.
         if self.end == self.buffer.len() {
             return Err(TokenizerError::TokenTooBig);
         }
+
+        //Read from reader and update end to match
         let old_end = self.end;
         let len = self.buffer.len();
         self.end += self.file.read(&mut self.buffer[old_end..len])?;
@@ -171,7 +188,9 @@ where
             return Ok(true);
         }
 
+        //Verify valid utf-8
         if let Err(utferr) = std::str::from_utf8(&self.buffer[self.start..self.end]) {
+            //Handle codepoints cut off by end of buffer
             self.last_codepoint = utferr.valid_up_to();
             if utferr.error_len().is_some() {
                 return Err(TokenizerError::Utf8Error);
@@ -184,11 +203,13 @@ where
     }
 
     fn gen_token(&mut self) -> Result<InternalToken, TokenizerError> {
+        //Helper function for processing tokens with a delimer.
         fn handle_delimered_token<'a, T>(
-            id: &'static str,
+            id: &'static str, // A unique name for the token type
             captures: &regex::Captures<'a>,
             constructor: T,
         ) -> Option<(usize, InternalToken)>
+        // (End of token byte offset, Token)
         where
             T: Fn(String) -> Token,
         {
@@ -281,35 +302,24 @@ where
         loop {
             // Grab another token if its whitespace
             let mut unchecked_token = self.gen_token();
-            let mut can_ignore = true;
-            while can_ignore {
-                if let Ok(token) = unchecked_token {
-                    if token.can_ignore() {
-                        unchecked_token = self.gen_token();
-                        continue;
-                    } else {
-                        unchecked_token = Ok(token);
-                    }
+            if let Ok(ref token) = unchecked_token {
+                if token.can_ignore() {
+                    continue;
                 }
-                can_ignore = false;
             }
 
-            let is_eof = if let Ok(InternalToken::EndOfFile(_)) = unchecked_token {
-                true
-            } else if let Err(TokenizerError::UnexpectedEndOfFile) = unchecked_token {
-                true
-            } else {
-                false
+            let is_eof = match unchecked_token {
+                Ok(InternalToken::EndOfFile(_)) | Err(TokenizerError::UnexpectedEndOfFile) => true,
+                _ => false,
             };
 
             return if is_eof {
                 let status = self.refill_buffer();
-                let end_of_file;
-                if let Ok(eof) = status {
-                    end_of_file = eof;
+                let end_of_file = if let Ok(eof) = status {
+                    eof
                 } else {
                     return Some(Err(status.unwrap_err()));
-                }
+                };
 
                 if end_of_file {
                     if self.last_codepoint != self.end {
@@ -334,6 +344,7 @@ where
                         unreachable!()
                     }
                 } else {
+                    //Start over when new data is read.
                     continue;
                 }
             } else {

@@ -82,11 +82,15 @@ impl From<pair::PairIterError> for CompilerError {
 
 #[derive(Clone)]
 enum SchemeMacro {
-    Builtin(BuiltinMacro)
+    Builtin(BuiltinMacro),
 }
 
 impl SchemeMacro {
-    fn expand(&self, args: NullableSchemePair, function: &mut PartialFunction) -> Result<Vec<CompilerAction>, CompilerError> {
+    fn expand(
+        &self,
+        args: NullableSchemePair,
+        function: &mut PartialFunction,
+    ) -> Result<Vec<CompilerAction>, CompilerError> {
         match self {
             SchemeMacro::Builtin(s_macro) => s_macro.expand(args, function),
         }
@@ -99,13 +103,17 @@ enum BuiltinMacro {
 }
 
 impl BuiltinMacro {
-    fn expand(&self, in_args: NullableSchemePair, function: &mut PartialFunction) -> Result<Vec<CompilerAction>, CompilerError> {
+    fn expand(
+        &self,
+        in_args: NullableSchemePair,
+        function: &mut PartialFunction,
+    ) -> Result<Vec<CompilerAction>, CompilerError> {
         match self {
             BuiltinMacro::Lamada => {
                 let args = if let Some(a) = in_args.into_option() {
                     a
                 } else {
-                    return Err(CompilerError::SyntaxError)
+                    return Err(CompilerError::SyntaxError);
                 };
 
                 let raw_formals = args.get_car().to_nullable_pair()?;
@@ -117,21 +125,23 @@ impl BuiltinMacro {
 
                 let code_or_none = args.get_cdr().to_nullable_pair()?;
 
-                let parent = replace(function, PartialFunction {
-                    compiled_code: SchemeFunction::new(raw_formals.len()? as u32, false),
-                    environment,
-                    parent: None,
-                });
+                let parent = replace(
+                    function,
+                    PartialFunction {
+                        compiled_code: SchemeFunction::new(raw_formals.len()? as u32, false),
+                        environment,
+                        parent: None,
+                    },
+                );
 
                 function.parent = Some(Box::new(parent));
 
                 Ok(if let Some(code) = code_or_none.into_option() {
-                    vec![CompilerAction::Compile {code}]
+                    vec![CompilerAction::Compile { code }]
                 } else {
                     Vec::new()
                 })
             }
-
         }
     }
 }
@@ -249,7 +259,7 @@ pub fn compile_function(
                                 let calling_function = function.lookup(&function_name)?;
                                 if let CompilerType::Macro(s_macro) = calling_function {
                                     stack.append(&mut s_macro.expand(argv, &mut function)?);
-                                    continue 'stack_loop
+                                    continue 'stack_loop;
                                 }
                             }
 
