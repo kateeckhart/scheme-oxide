@@ -19,15 +19,16 @@
 
 use crate::types::*;
 use std::cell::RefCell;
-use std::cmp::Ordering;
 use std::rc::Rc;
 
 mod compiler;
 pub use self::compiler::CompilerError;
-use self::compiler::EnvironmentFrame;
 
 mod environment;
 use environment::MAIN_ENVIRONMENT;
+
+mod builtin;
+use builtin::BuiltinFunction;
 
 #[derive(Copy, Clone, Debug)]
 struct Statement {
@@ -56,7 +57,7 @@ impl StackTop {
     }
 }
 
-struct StackFrame {
+pub struct StackFrame {
     top: StackTop,
     statement_num: usize,
     function: Rc<SchemeFunction>,
@@ -193,65 +194,6 @@ impl FunctionRefInner {
             FunctionRefInner::Builtin(func) => func.call(stack, args, ret),
             _ => unimplemented!(),
         }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-enum BuiltinFunction {
-    Add,
-    Sub,
-    Compare { invert: bool, mode: Ordering },
-}
-
-impl BuiltinFunction {
-    fn call(
-        self,
-        stack: &mut Vec<StackFrame>,
-        args: &[SchemeType],
-        ret: &mut Option<SchemeType>,
-    ) -> Result<(), RuntimeError> {
-        *ret = Some(match self {
-            BuiltinFunction::Add => {
-                let mut sum = 0;
-                for num in args {
-                    sum += num.to_number()?
-                }
-                SchemeType::Number(sum)
-            }
-            BuiltinFunction::Sub => {
-                if args.len() == 1 {
-                    SchemeType::Number(-args[0].to_number()?)
-                } else if args.len() > 1 {
-                    let mut iter = args.iter();
-                    let mut difference = iter.next().unwrap().to_number()?;
-                    for number in iter {
-                        difference -= number.to_number()?
-                    }
-                    SchemeType::Number(difference)
-                } else {
-                    return Err(RuntimeError::ArgError);
-                }
-            }
-            BuiltinFunction::Compare { invert, mode } => {
-                if args.len() < 2 {
-                    return Err(RuntimeError::ArgError);
-                }
-                let mut iter = args.iter();
-                let mut current = iter.next().unwrap().to_number()?;
-                let mut ret = SchemeType::Bool(true);
-                for raw_num in iter {
-                    let num = raw_num.to_number()?;
-                    let res = current.cmp(&num);
-                    if (res == mode) == invert {
-                        ret = SchemeType::Bool(false);
-                        break;
-                    }
-                    current = num;
-                }
-                ret
-            }
-        });
-        Ok(())
     }
 }
 
