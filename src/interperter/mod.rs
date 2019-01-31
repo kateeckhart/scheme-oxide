@@ -1,5 +1,5 @@
 /*
-    Copyright 2018 Alexander Eckhart
+    Copyright 2018-2019 Alexander Eckhart
 
     This file is part of scheme-oxide.
 
@@ -25,6 +25,9 @@ use std::rc::Rc;
 mod compiler;
 pub use self::compiler::CompilerError;
 use self::compiler::EnvironmentFrame;
+
+mod environment;
+use environment::MAIN_ENVIRONMENT;
 
 #[derive(Copy, Clone, Debug)]
 struct Statement {
@@ -250,89 +253,6 @@ impl BuiltinFunction {
         });
         Ok(())
     }
-}
-
-struct BaseEnvironment {
-    frame: EnvironmentFrame,
-    bounded: Vec<SchemeType>,
-}
-
-impl BaseEnvironment {
-    fn new() -> Self {
-        Self {
-            frame: EnvironmentFrame::new(),
-            bounded: Vec::new(),
-        }
-    }
-
-    fn push_object(&mut self, name: &str, object: SchemeType) {
-        self.frame.new_object(name);
-        self.bounded.push(object)
-    }
-
-    fn push_builtin_function(&mut self, name: &str, function: BuiltinFunction) {
-        self.push_object(
-            name,
-            SchemeType::Function(FunctionRef(FunctionRefInner::Builtin(function))),
-        )
-    }
-}
-
-fn gen_scheme_environment() -> BaseEnvironment {
-    let mut ret = BaseEnvironment::new();
-
-    ret.frame.add_builtin_macros();
-
-    ret.push_builtin_function("+", BuiltinFunction::Add);
-    ret.push_builtin_function("-", BuiltinFunction::Sub);
-
-    ret.push_builtin_function(
-        "=",
-        BuiltinFunction::Compare {
-            invert: false,
-            mode: Ordering::Equal,
-        },
-    );
-    ret.push_builtin_function(
-        "<",
-        BuiltinFunction::Compare {
-            invert: false,
-            mode: Ordering::Less,
-        },
-    );
-    ret.push_builtin_function(
-        "<=",
-        BuiltinFunction::Compare {
-            invert: true,
-            mode: Ordering::Greater,
-        },
-    );
-    ret.push_builtin_function(
-        ">",
-        BuiltinFunction::Compare {
-            invert: false,
-            mode: Ordering::Greater,
-        },
-    );
-    ret.push_builtin_function(
-        ">=",
-        BuiltinFunction::Compare {
-            invert: true,
-            mode: Ordering::Less,
-        },
-    );
-
-    ret
-}
-
-fn gen_main_environment() -> BaseEnvironment {
-    gen_scheme_environment()
-}
-
-thread_local! {
-    static SCHEME_ENVIORNMENT: BaseEnvironment = gen_scheme_environment();
-
-    static MAIN_ENVIRONMENT: BaseEnvironment = gen_main_environment();
 }
 
 #[derive(Clone, Debug)]
