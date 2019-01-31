@@ -70,7 +70,7 @@ fn gen_regex() -> Regex {
 
     let boolean = "(?P<bool>#t|#f)";
 
-    //Matches any multi character
+    //Matches any multi character sequence cut off by end of buffer 
     let clipped = r"(?P<clipped>(?:\.{1,2}|#)$)";
 
     let regex_str = format!(
@@ -108,7 +108,7 @@ impl InternalToken {
         }
     }
 
-    fn unwrap(self) -> Token {
+    fn into_public(self) -> Token {
         self.into_option().unwrap()
     }
 }
@@ -170,7 +170,7 @@ where
         for _ in 0..drained {
             self.buffer.push(0)
         }
-        //Update pointers to point to start of token
+        //Update offsets to point to start of token
         self.start -= drained;
         self.end -= drained;
         self.last_codepoint -= drained;
@@ -192,10 +192,13 @@ where
         if let Err(utferr) = std::str::from_utf8(&self.buffer[self.start..self.end]) {
             //Handle codepoints cut off by end of buffer
             self.last_codepoint = utferr.valid_up_to();
+
+            //Rethrow invalid utf-8 strings 
             if utferr.error_len().is_some() {
                 return Err(TokenizerError::Utf8Error);
             }
         } else {
+            //The entire buffer has valid utf-8
             self.last_codepoint = self.end;
         }
 
@@ -300,9 +303,9 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            // Grab another token if its whitespace
-            let mut unchecked_token = self.gen_token();
+            let unchecked_token = self.gen_token();
             if let Ok(ref token) = unchecked_token {
+                //Grab another token if its whitespace
                 if token.can_ignore() {
                     continue;
                 }
@@ -336,7 +339,7 @@ where
                         } else if let InternalToken::EndOfFile(Some(token)) = eof_or_token {
                             Some(Ok(token))
                         } else {
-                            Some(Ok(eof_or_token.unwrap()))
+                            Some(Ok(eof_or_token.into_public()))
                         }
                     } else if let Err(err) = unchecked_token {
                         Some(Err(err))
@@ -348,7 +351,7 @@ where
                     continue;
                 }
             } else {
-                Some(unchecked_token.map(InternalToken::unwrap))
+                Some(unchecked_token.map(InternalToken::into_public))
             };
         }
     }

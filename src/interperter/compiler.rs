@@ -21,6 +21,7 @@ use super::{SchemeFunction, Statement, StatementType};
 use crate::types::*;
 use std::collections::HashMap;
 use std::mem::replace;
+use std::ops::DerefMut;
 
 #[derive(Clone)]
 pub struct EnvironmentFrame {
@@ -162,24 +163,23 @@ impl PartialFunction {
     fn traverse_macro(&mut self, name: &str) -> Result<Option<SchemeMacro>, CompilerError> {
         let mut function = Some(self);
 
-        loop {
-            if let Some(parent) = function.take().unwrap().parent.as_mut() {
-                if let Some(compiler_type) = parent.environment.lookup(name) {
-                    return Ok(match compiler_type {
-                        CompilerType::Runtime(_) => None,
-                        CompilerType::Macro(s_macro) => Some(s_macro),
-                    });
-                } else {
-                    function = Some(parent);
-                }
+        while let Some(func) = function {
+            if let Some(compiler_type) = func.environment.lookup(name) {
+                return Ok(match compiler_type {
+                    CompilerType::Runtime(_) => None,
+                    CompilerType::Macro(s_macro) => Some(s_macro),
+                });
             } else {
-                return Err(CompilerError::IdentifierNotFound);
+                function = func.parent.as_mut().map(Box::deref_mut);
             }
         }
+
+        Err(CompilerError::IdentifierNotFound)
     }
 
     fn lookup(&mut self, name: &str) -> Result<CompilerType, CompilerError> {
         if let Some(ident) = self.environment.lookup(name) {
+            //Simple case: Variable has already been declared/looked up
             return Ok(ident);
         } else {
             let macro_or_none = self.traverse_macro(name)?;
@@ -248,13 +248,16 @@ pub fn compile_function(
                 while let Some(expr_or_err) = expr_iter.next() {
                     let expr = expr_or_err?;
                     match expr {
+                        //Function call/Macro use
                         SchemeType::Pair(pair) => {
+                            //Backup the rest of the expressions in this block
                             if let Some(rest) = expr_iter.get_rest()? {
                                 stack.push(CompilerAction::Compile { code: rest })
                             }
 
                             let function_object = pair.get_car();
                             let argv = pair.get_cdr().to_nullable_pair()?;
+                            //If the name is a macro, expand the macro
                             if let SchemeType::Symbol(function_name) = function_object {
                                 let calling_function = function.lookup(&function_name)?;
                                 if let CompilerType::Macro(s_macro) = calling_function {
@@ -265,8 +268,7 @@ pub fn compile_function(
 
                             let argc = argv.len()?;
 
-                            let function_name = SchemePair::one(pair.get_car());
-
+                            //Compile the call to the function
                             stack.push(CompilerAction::EmitAsm {
                                 statements: vec![Statement {
                                     s_type: StatementType::Call,
@@ -274,10 +276,15 @@ pub fn compile_function(
                                 }],
                             });
 
+
+                            let function_name = SchemePair::one(pair.get_car());
+
+                            //Compile expression that evaluates to the function
                             stack.push(CompilerAction::Compile {
                                 code: function_name,
                             });
 
+                            //Compile the arguments to the function
                             if let Some(arguments) = argv.into_option() {
                                 stack.push(CompilerAction::Compile { code: arguments });
                             }
