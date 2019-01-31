@@ -17,9 +17,9 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::cmp::Ordering;
+use super::{compiler::EnvironmentFrame, BuiltinFunction, FunctionRef, FunctionRefInner};
 use crate::types::*;
-use super::{BuiltinFunction, FunctionRef, FunctionRefInner, compiler::EnvironmentFrame};
+use std::cmp::Ordering;
 
 pub struct BaseEnvironment {
     pub frame: EnvironmentFrame,
@@ -103,4 +103,3 @@ thread_local! {
 
     pub static MAIN_ENVIRONMENT: BaseEnvironment = gen_main_environment();
 }
-

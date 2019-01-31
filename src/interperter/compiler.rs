@@ -276,7 +276,6 @@ pub fn compile_function(
                                 }],
                             });
 
-
                             let function_name = SchemePair::one(pair.get_car());
 
                             //Compile expression that evaluates to the function

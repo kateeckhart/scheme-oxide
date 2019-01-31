@@ -70,7 +70,7 @@ fn gen_regex() -> Regex {
 
     let boolean = "(?P<bool>#t|#f)";
 
-    //Matches any multi character sequence cut off by end of buffer 
+    //Matches any multi character sequence cut off by end of buffer
     let clipped = r"(?P<clipped>(?:\.{1,2}|#)$)";
 
     let regex_str = format!(
@@ -193,7 +193,7 @@ where
             //Handle codepoints cut off by end of buffer
             self.last_codepoint = utferr.valid_up_to();
 
-            //Rethrow invalid utf-8 strings 
+            //Rethrow invalid utf-8 strings
             if utferr.error_len().is_some() {
                 return Err(TokenizerError::Utf8Error);
             }
