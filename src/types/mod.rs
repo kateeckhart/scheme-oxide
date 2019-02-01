@@ -61,6 +61,13 @@ impl SchemeType {
         }
     }
 
+    pub fn to_pair(&self) -> Result<SchemePair, CastError> {
+        Ok(match self {
+            SchemeType::Pair(ret) => ret.clone().into(),
+            _ => return Err(CastError),
+        })
+    }
+
     pub fn to_nullable_pair(&self) -> Result<NullableSchemePair, CastError> {
         Ok(match self {
             SchemeType::Pair(ret) => ret.clone().into(),

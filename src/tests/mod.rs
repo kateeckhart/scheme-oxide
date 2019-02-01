@@ -21,7 +21,7 @@ use std::io;
 
 use crate::interperter::{self, RuntimeError};
 use crate::parser::Parser;
-use crate::types::pair::ListFactory;
+use crate::types::pair::{ListFactory, PairIterError};
 use crate::types::*;
 
 fn eval_string(token_stream: &str) -> Result<SchemeType, RuntimeError> {
@@ -76,4 +76,20 @@ fn add_three() {
             }
         }
     }
+}
+
+#[test]
+fn inf_list() {
+    let list = SchemePair::one(SchemeType::EmptyList);
+    list.set_cdr(list.clone().into());
+
+    let mut list_iter = list.iter();
+
+    for _ in 0..5000 {
+        match list_iter.next() {
+            Some(Err(PairIterError::Circular)) => return,
+            _ => (),
+        }
+    }
+    panic!()
 }

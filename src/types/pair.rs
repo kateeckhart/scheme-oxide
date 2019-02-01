@@ -76,9 +76,7 @@ impl SchemePair {
     }
 
     pub fn iter(&self) -> PairIter {
-        PairIter {
-            pair: self.clone().into(),
-        }
+        PairIter::new(self.clone().into())
     }
 
     pub fn len(&self) -> Result<usize, PairIterError> {
@@ -107,9 +105,7 @@ impl NullableSchemePair {
     }
 
     pub fn iter(&self) -> PairIter {
-        PairIter {
-            pair: self.clone().into(),
-        }
+        PairIter::new(self.clone().into())
     }
 
     pub fn len(&self) -> Result<usize, PairIterError> {
@@ -135,9 +131,19 @@ impl From<Option<SchemePair>> for NullableSchemePair {
 
 pub struct PairIter {
     pair: SchemeType,
+    tortoise: SchemeType,
+    tortoise_step: bool,
 }
 
 impl PairIter {
+    fn new(object: SchemeType) -> Self {
+        Self {
+            pair: object.clone(),
+            tortoise: SchemeType::EmptyList,
+            tortoise_step: false,
+        }
+    }
+
     pub fn get_rest(&self) -> Result<Option<SchemePair>, PairIterError> {
         let object = self.pair.clone();
         match object {
@@ -162,6 +168,21 @@ impl Iterator for PairIter {
         match object {
             SchemeType::Pair(pair) => {
                 self.pair = pair.get_cdr();
+
+                if let Ok(tort) = self.tortoise.clone().to_pair() {
+                    if Rc::ptr_eq(&pair.0, &tort.0) {
+                        return Some(Err(PairIterError::Circular));
+                    }
+
+                    if self.tortoise_step {
+                        self.tortoise = tort.get_cdr()
+                    }
+
+                    self.tortoise_step = !self.tortoise_step;
+                } else {
+                    self.tortoise = pair.clone().into()
+                }
+
                 Some(Ok(pair.get_car()))
             }
             SchemeType::EmptyList => None,
