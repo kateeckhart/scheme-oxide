@@ -63,7 +63,7 @@ impl SchemeType {
 
     pub fn to_pair(&self) -> Result<SchemePair, CastError> {
         Ok(match self {
-            SchemeType::Pair(ret) => ret.clone().into(),
+            SchemeType::Pair(ret) => ret.clone(),
             _ => return Err(CastError),
         })
     }
