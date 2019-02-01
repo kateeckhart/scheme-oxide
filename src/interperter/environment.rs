@@ -19,11 +19,13 @@
 
 use super::{compiler::EnvironmentFrame, BuiltinFunction, FunctionRef, FunctionRefInner};
 use crate::types::*;
+use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::rc::Rc;
 
 pub struct BaseEnvironment {
     pub frame: EnvironmentFrame,
-    pub bounded: Vec<SchemeType>,
+    pub bounded: Vec<Rc<RefCell<SchemeType>>>,
 }
 
 impl BaseEnvironment {
@@ -36,7 +38,7 @@ impl BaseEnvironment {
 
     fn push_object(&mut self, name: &str, object: SchemeType) {
         self.frame.new_object(name);
-        self.bounded.push(object)
+        self.bounded.push(Rc::new(RefCell::new(object)))
     }
 
     fn push_builtin_function(&mut self, name: &str, function: BuiltinFunction) {

@@ -22,6 +22,7 @@ use crate::types::*;
 use std::collections::HashMap;
 use std::mem::replace;
 use std::ops::DerefMut;
+use std::rc::Rc;
 
 #[derive(Clone)]
 pub struct EnvironmentFrame {
@@ -135,10 +136,21 @@ impl BuiltinMacro {
                     },
                 );
 
+                let lamada_n = parent.compiled_code.lamadas.len();
+
                 function.parent = Some(Box::new(parent));
 
                 Ok(if let Some(code) = code_or_none.into_option() {
-                    vec![CompilerAction::Compile { code }]
+                    vec![
+                        CompilerAction::EmitAsm {
+                            statements: vec![Statement {
+                                arg: lamada_n as u32,
+                                s_type: StatementType::Lamada,
+                            }],
+                        },
+                        CompilerAction::FunctionDone,
+                        CompilerAction::Compile { code },
+                    ]
                 } else {
                     Vec::new()
                 })
@@ -221,7 +233,6 @@ enum CompilerAction {
     Compile { code: SchemePair },
     FunctionDone,
     EmitAsm { statements: Vec<Statement> },
-    ExprDone,
 }
 
 pub fn compile_function(
@@ -315,16 +326,12 @@ pub fn compile_function(
             CompilerAction::EmitAsm { mut statements } => {
                 current_code_block.append(&mut statements);
             }
-            CompilerAction::ExprDone => {
-                let expr_list = replace(&mut current_code_block, Vec::new());
-                stack.push(CompilerAction::EmitAsm {
-                    statements: expr_list,
-                })
-            }
             CompilerAction::FunctionDone => {
                 replace(&mut function.compiled_code.code, current_code_block);
                 current_code_block = Vec::new();
-                if let Some(parent) = function.parent {
+                if let Some(mut parent) = function.parent {
+                    let child_code = function.compiled_code;
+                    parent.compiled_code.lamadas.push(Rc::new(child_code));
                     function = *parent;
                 } else {
                     break 'stack_loop;

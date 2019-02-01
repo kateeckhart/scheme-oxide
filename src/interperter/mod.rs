@@ -41,15 +41,16 @@ enum StatementType {
     Get,
     Literal,
     Call,
+    Lamada,
 }
 
 struct StackTop {
     arg_stack: Vec<SchemeType>,
-    vars: Vec<SchemeType>,
+    vars: Vec<Rc<RefCell<SchemeType>>>,
 }
 
 impl StackTop {
-    fn new(vars: Vec<SchemeType>) -> Self {
+    fn new(vars: Vec<Rc<RefCell<SchemeType>>>) -> Self {
         Self {
             arg_stack: Vec::new(),
             vars,
@@ -70,6 +71,7 @@ pub struct SchemeFunction {
     captures: Vec<u32>,
     code: Vec<Statement>,
     literals: Vec<SchemeType>,
+    lamadas: Vec<Rc<SchemeFunction>>,
 }
 
 impl SchemeFunction {
@@ -80,6 +82,7 @@ impl SchemeFunction {
             captures: Vec::new(),
             code: Vec::new(),
             literals: Vec::new(),
+            lamadas: Vec::new(),
         }
     }
 }
@@ -102,7 +105,7 @@ fn exec_function(
 
 fn exec_top_function(
     top: Rc<SchemeFunction>,
-    env: Vec<SchemeType>,
+    env: Vec<Rc<RefCell<SchemeType>>>,
 ) -> Result<SchemeType, RuntimeError> {
     if top.args != 0 || top.is_vargs {
         panic!("Not a top level function.");
@@ -123,7 +126,9 @@ fn exec_top_function(
         while let Some(statement) = code_iter.next() {
             let arg = statement.arg;
             match statement.s_type {
-                StatementType::Get => frame.arg_stack.push(frame.vars[arg as usize].clone()),
+                StatementType::Get => frame
+                    .arg_stack
+                    .push(frame.vars[arg as usize].borrow().clone()),
                 StatementType::Literal => frame
                     .arg_stack
                     .push(function.literals[arg as usize].clone()),
@@ -141,6 +146,22 @@ fn exec_top_function(
                     });
                     exec_function(new_function, &mut stack, &args, &mut ret_expr)?;
                     continue 'exec_loop;
+                }
+                StatementType::Lamada => {
+                    let child_function = function.lamadas[arg as usize].clone();
+
+                    let mut captures = Vec::new();
+
+                    for capture in child_function.captures.iter() {
+                        captures.push(frame.vars[*capture as usize].clone())
+                    }
+
+                    frame.arg_stack.push(SchemeType::Function(FunctionRef(
+                        FunctionRefInner::Derived(DerivedFunctionRef {
+                            function: child_function,
+                            captures,
+                        }),
+                    )))
                 }
             }
         }
