@@ -91,8 +91,7 @@ fn exec_function(
     object: SchemeType,
     stack: &mut Vec<StackFrame>,
     args: &[SchemeType],
-    ret: &mut Option<SchemeType>,
-) -> Result<(), RuntimeError> {
+) -> Result<Option<SchemeType>, RuntimeError> {
     let function;
     if let SchemeType::Function(func) = object {
         function = func.0;
@@ -100,7 +99,7 @@ fn exec_function(
         return Err(RuntimeError::TypeError);
     }
 
-    function.call(stack, args, ret)
+    function.call(stack, args)
 }
 
 fn exec_top_function(
@@ -144,7 +143,7 @@ fn exec_top_function(
                         statement_num,
                         function: function.clone(),
                     });
-                    exec_function(new_function, &mut stack, &args, &mut ret_expr)?;
+                    ret_expr = exec_function(new_function, &mut stack, &args)?;
                     continue 'exec_loop;
                 }
                 StatementType::Lamada => {
@@ -209,10 +208,9 @@ impl FunctionRefInner {
         self,
         stack: &mut Vec<StackFrame>,
         args: &[SchemeType],
-        ret: &mut Option<SchemeType>,
-    ) -> Result<(), RuntimeError> {
+    ) -> Result<Option<SchemeType>, RuntimeError> {
         match self {
-            FunctionRefInner::Builtin(func) => func.call(stack, args, ret),
+            FunctionRefInner::Builtin(func) => func.call(stack, args),
             _ => unimplemented!(),
         }
     }

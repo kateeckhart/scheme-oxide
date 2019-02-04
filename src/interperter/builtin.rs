@@ -31,11 +31,10 @@ pub enum BuiltinFunction {
 impl BuiltinFunction {
     pub fn call(
         self,
-        stack: &mut Vec<StackFrame>,
+        _: &mut Vec<StackFrame>,
         args: &[SchemeType],
-        ret: &mut Option<SchemeType>,
-    ) -> Result<(), RuntimeError> {
-        *ret = Some(match self {
+    ) -> Result<Option<SchemeType>, RuntimeError> {
+        Ok(Some(match self {
             BuiltinFunction::Add => {
                 let mut sum = 0;
                 for num in args {
@@ -75,7 +74,6 @@ impl BuiltinFunction {
                 }
                 ret
             }
-        });
-        Ok(())
+        }))
     }
 }
