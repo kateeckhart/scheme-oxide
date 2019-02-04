@@ -119,7 +119,7 @@ fn exec_top_function(
         let mut frame = s_frame.top;
         let function = s_frame.function.clone();
         let mut code_iter = function.code[s_frame.statement_num..].iter();
-        if s_frame.statement_num > 0 {
+        if ret_expr.is_some() {
             frame.arg_stack.push(ret_expr.take().unwrap())
         }
         while let Some(statement) = code_iter.next() {
