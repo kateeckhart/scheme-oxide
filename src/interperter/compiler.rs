@@ -140,20 +140,20 @@ impl BuiltinMacro {
 
                 function.parent = Some(Box::new(parent));
 
-                Ok(if let Some(code) = code_or_none.into_option() {
-                    vec![
-                        CompilerAction::EmitAsm {
-                            statements: vec![Statement {
-                                arg: lamada_n as u32,
-                                s_type: StatementType::Lamada,
-                            }],
-                        },
-                        CompilerAction::FunctionDone,
-                        CompilerAction::Compile { code },
-                    ]
-                } else {
-                    Vec::new()
-                })
+                let mut ret = vec![
+                    CompilerAction::EmitAsm {
+                        statements: vec![Statement {
+                            arg: lamada_n as u32,
+                            s_type: StatementType::Lamada,
+                        }],
+                    },
+                    CompilerAction::FunctionDone,
+                ];
+
+                if let Some(code) = code_or_none.into_option() {
+                    ret.push(CompilerAction::Compile { code });
+                }
+                Ok(ret)
             }
         }
     }
@@ -272,6 +272,10 @@ pub fn compile_function(
                             if let SchemeType::Symbol(function_name) = function_object {
                                 let calling_function = function.lookup(&function_name)?;
                                 if let CompilerType::Macro(s_macro) = calling_function {
+                                    let code = current_code_block;
+                                    current_code_block = Vec::new();
+
+                                    stack.push(CompilerAction::EmitAsm { statements: code });
                                     stack.append(&mut s_macro.expand(argv, &mut function)?);
                                     continue 'stack_loop;
                                 }
@@ -289,15 +293,15 @@ pub fn compile_function(
 
                             let function_name = SchemePair::one(pair.get_car());
 
-                            //Compile expression that evaluates to the function
-                            stack.push(CompilerAction::Compile {
-                                code: function_name,
-                            });
-
                             //Compile the arguments to the function
                             if let Some(arguments) = argv.into_option() {
                                 stack.push(CompilerAction::Compile { code: arguments });
                             }
+
+                            //Compile expression that evaluates to the function
+                            stack.push(CompilerAction::Compile {
+                                code: function_name,
+                            });
 
                             continue 'stack_loop;
                         }

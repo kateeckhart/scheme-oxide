@@ -49,19 +49,23 @@ struct StackTop {
     vars: Vec<Rc<RefCell<SchemeType>>>,
 }
 
-impl StackTop {
-    fn new(vars: Vec<Rc<RefCell<SchemeType>>>) -> Self {
-        Self {
-            arg_stack: Vec::new(),
-            vars,
-        }
-    }
-}
-
 pub struct StackFrame {
     top: StackTop,
     statement_num: usize,
     function: Rc<SchemeFunction>,
+}
+
+impl StackFrame {
+    fn new(vars: Vec<Rc<RefCell<SchemeType>>>, function: Rc<SchemeFunction>) -> Self {
+        Self {
+            top: StackTop {
+                arg_stack: Vec::new(),
+                vars,
+            },
+            statement_num: 0,
+            function,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -90,7 +94,7 @@ impl SchemeFunction {
 fn exec_function(
     object: SchemeType,
     stack: &mut Vec<StackFrame>,
-    args: &[SchemeType],
+    args: Vec<SchemeType>,
 ) -> Result<Option<SchemeType>, RuntimeError> {
     let function;
     if let SchemeType::Function(func) = object {
@@ -109,15 +113,11 @@ fn exec_top_function(
     if top.args != 0 || top.is_vargs {
         panic!("Not a top level function.");
     }
-    let mut stack = vec![StackFrame {
-        top: StackTop::new(env),
-        statement_num: 0,
-        function: top,
-    }];
+    let mut stack = vec![StackFrame::new(env, top)];
     let mut ret_expr = None;
     'exec_loop: while let Some(s_frame) = stack.pop() {
         let mut frame = s_frame.top;
-        let function = s_frame.function.clone();
+        let function = s_frame.function;
         let mut code_iter = function.code[s_frame.statement_num..].iter();
         if ret_expr.is_some() {
             frame.arg_stack.push(ret_expr.take().unwrap())
@@ -133,17 +133,17 @@ fn exec_top_function(
                     .push(function.literals[arg as usize].clone()),
                 StatementType::Call => {
                     let statement_num = function.code.len() - code_iter.as_slice().len();
-                    let new_function = frame.arg_stack.pop().unwrap();
-                    let args = frame
+                    let mut drain = frame
                         .arg_stack
-                        .drain(frame.arg_stack.len() - (arg as usize)..)
-                        .collect::<Vec<_>>();
+                        .drain(frame.arg_stack.len() - (arg as usize) - 1..);
+                    let new_function = drain.next().unwrap();
+                    let args = drain.collect::<Vec<_>>();
                     stack.push(StackFrame {
                         top: frame,
                         statement_num,
                         function: function.clone(),
                     });
-                    ret_expr = exec_function(new_function, &mut stack, &args)?;
+                    ret_expr = exec_function(new_function, &mut stack, args)?;
                     continue 'exec_loop;
                 }
                 StatementType::Lamada => {
@@ -207,11 +207,11 @@ impl FunctionRefInner {
     fn call(
         self,
         stack: &mut Vec<StackFrame>,
-        args: &[SchemeType],
+        args: Vec<SchemeType>,
     ) -> Result<Option<SchemeType>, RuntimeError> {
         match self {
             FunctionRefInner::Builtin(func) => func.call(stack, args),
-            _ => unimplemented!(),
+            FunctionRefInner::Derived(func) => func.call(stack, args),
         }
     }
 }
@@ -220,4 +220,22 @@ impl FunctionRefInner {
 struct DerivedFunctionRef {
     function: Rc<SchemeFunction>,
     captures: Vec<Rc<RefCell<SchemeType>>>,
+}
+
+impl DerivedFunctionRef {
+    fn call(
+        self,
+        stack: &mut Vec<StackFrame>,
+        args: Vec<SchemeType>,
+    ) -> Result<Option<SchemeType>, RuntimeError> {
+        let mut env = Vec::new();
+        for arg in args {
+            env.push(Rc::new(RefCell::new(arg)))
+        }
+        for capture in self.captures {
+            env.push(capture)
+        }
+        stack.push(StackFrame::new(env, self.function));
+        Ok(None)
+    }
 }

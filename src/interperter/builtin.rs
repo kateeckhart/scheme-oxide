@@ -32,7 +32,7 @@ impl BuiltinFunction {
     pub fn call(
         self,
         _: &mut Vec<StackFrame>,
-        args: &[SchemeType],
+        mut args: Vec<SchemeType>,
     ) -> Result<Option<SchemeType>, RuntimeError> {
         Ok(Some(match self {
             BuiltinFunction::Add => {
@@ -46,7 +46,7 @@ impl BuiltinFunction {
                 if args.len() == 1 {
                     SchemeType::Number(-args[0].to_number()?)
                 } else if args.len() > 1 {
-                    let mut iter = args.iter();
+                    let mut iter = args.drain(..);
                     let mut difference = iter.next().unwrap().to_number()?;
                     for number in iter {
                         difference -= number.to_number()?
@@ -60,7 +60,7 @@ impl BuiltinFunction {
                 if args.len() < 2 {
                     return Err(RuntimeError::ArgError);
                 }
-                let mut iter = args.iter();
+                let mut iter = args.drain(..);
                 let mut current = iter.next().unwrap().to_number()?;
                 let mut ret = SchemeType::Bool(true);
                 for raw_num in iter {
