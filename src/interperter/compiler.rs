@@ -140,20 +140,20 @@ impl BuiltinMacro {
 
                 function.parent = Some(Box::new(parent));
 
-                let mut ret = vec![
-                    CompilerAction::EmitAsm {
-                        statements: vec![Statement {
-                            arg: lamada_n as u32,
-                            s_type: StatementType::Lamada,
-                        }],
-                    },
-                    CompilerAction::FunctionDone,
-                ];
-
                 if let Some(code) = code_or_none.into_option() {
-                    ret.push(CompilerAction::Compile { code });
+                    Ok(vec![
+                        CompilerAction::EmitAsm {
+                            statements: vec![Statement {
+                                arg: lamada_n as u32,
+                                s_type: StatementType::Lamada,
+                            }],
+                        },
+                        CompilerAction::FunctionDone,
+                        CompilerAction::Compile { code },
+                    ])
+                } else {
+                    Err(CompilerError::SyntaxError)
                 }
-                Ok(ret)
             }
         }
     }
