@@ -68,7 +68,7 @@ fn gen_regex() -> Regex {
 
     let block = r"(?P<block>\(|\))";
 
-    let boolean = "(?P<bool>#t|#f)";
+    let boolean = "(?P<boolean>#t|#f)";
 
     //Matches any multi character sequence cut off by end of buffer
     let clipped = r"(?P<clipped>(?:\.{1,2}|#)$)";

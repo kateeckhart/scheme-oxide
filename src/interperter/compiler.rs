@@ -51,7 +51,8 @@ impl EnvironmentFrame {
     }
 
     pub fn add_builtin_macros(&mut self) {
-        self.push_macro("lamada", SchemeMacro::Builtin(BuiltinMacro::Lamada))
+        self.push_macro("lamada", SchemeMacro::Builtin(BuiltinMacro::Lamada));
+        self.push_macro("if", SchemeMacro::Builtin(BuiltinMacro::If));
     }
 
     fn push_macro(&mut self, name: &str, s_macro: SchemeMacro) {
@@ -82,6 +83,10 @@ impl From<pair::PairIterError> for CompilerError {
     }
 }
 
+fn generate_unspecified() -> SchemeType {
+    SchemeType::Bool(false)
+}
+
 #[derive(Clone)]
 enum SchemeMacro {
     Builtin(BuiltinMacro),
@@ -102,6 +107,7 @@ impl SchemeMacro {
 #[derive(Clone)]
 enum BuiltinMacro {
     Lamada,
+    If,
 }
 
 impl BuiltinMacro {
@@ -154,6 +160,39 @@ impl BuiltinMacro {
                 } else {
                     Err(CompilerError::SyntaxError)
                 }
+            }
+            BuiltinMacro::If => {
+                let mut arg_iter = in_args.iter();
+                //Grab the two required params, the optional param, and the rest.
+                let (test, true_expr, false_expr_or_none, rest) = if let (Some(x), Some(y), z, z1) = (
+                    arg_iter.next(),
+                    arg_iter.next(),
+                    arg_iter.next(),
+                    arg_iter.next(),
+                ) {
+                    (x?, y?, z, z1)
+                } else {
+                    return Err(CompilerError::SyntaxError);
+                };
+                if rest.is_some() {
+                    return Err(CompilerError::SyntaxError);
+                };
+
+                let false_expr = if let Some(expr) = false_expr_or_none {
+                    expr?
+                } else {
+                    generate_unspecified()
+                };
+
+                Ok(vec![
+                    CompilerAction::IfCompileTrue {
+                        true_expr: SchemePair::one(true_expr),
+                        false_expr: SchemePair::one(false_expr),
+                    },
+                    CompilerAction::Compile {
+                        code: SchemePair::one(test),
+                    },
+                ])
             }
         }
     }
@@ -230,9 +269,25 @@ impl PartialFunction {
 
 #[derive(Debug)]
 enum CompilerAction {
-    Compile { code: SchemePair },
+    Compile {
+        code: SchemePair,
+    },
     FunctionDone,
-    EmitAsm { statements: Vec<Statement> },
+    EmitAsm {
+        statements: Vec<Statement>,
+    },
+    IfCompileTrue {
+        true_expr: SchemePair,
+        false_expr: SchemePair,
+    },
+    IfCompileFalse {
+        test_asm: Vec<Statement>,
+        false_expr: SchemePair,
+    },
+    IfCompileDone {
+        test_asm: Vec<Statement>,
+        true_asm: Vec<Statement>,
+    },
 }
 
 pub fn compile_function(
@@ -340,6 +395,45 @@ pub fn compile_function(
                 } else {
                     break 'stack_loop;
                 }
+            }
+            CompilerAction::IfCompileTrue {
+                true_expr,
+                false_expr,
+            } => {
+                stack.push(CompilerAction::IfCompileFalse {
+                    false_expr,
+                    test_asm: current_code_block,
+                });
+                stack.push(CompilerAction::Compile { code: true_expr });
+                current_code_block = Vec::new();
+            }
+            CompilerAction::IfCompileFalse {
+                false_expr,
+                test_asm,
+            } => {
+                stack.push(CompilerAction::IfCompileDone {
+                    test_asm,
+                    true_asm: current_code_block,
+                });
+                stack.push(CompilerAction::Compile { code: false_expr });
+                current_code_block = Vec::new();
+            }
+            CompilerAction::IfCompileDone {
+                test_asm,
+                mut true_asm,
+            } => {
+                let mut false_asm = current_code_block;
+                current_code_block = test_asm;
+                current_code_block.push(Statement {
+                    s_type: StatementType::BranchIfFalse,
+                    arg: true_asm.len() as u32 + 1,
+                });
+                current_code_block.append(&mut true_asm);
+                current_code_block.push(Statement {
+                    s_type: StatementType::Branch,
+                    arg: false_asm.len() as u32,
+                });
+                current_code_block.append(&mut false_asm);
             }
         }
     }

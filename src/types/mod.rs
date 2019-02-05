@@ -95,6 +95,8 @@ impl Display for SchemeType {
             }
             SchemeType::Symbol(symbol) => symbol.fmt(f)?,
             SchemeType::EmptyList => write!(f, "()")?,
+            SchemeType::Bool(true) => write!(f, "#t")?,
+            SchemeType::Bool(false) => write!(f, "#f")?,
             _ => return Err(fmt::Error),
         }
         Ok(())

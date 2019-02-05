@@ -42,6 +42,8 @@ enum StatementType {
     Literal,
     Call,
     Lamada,
+    Branch,
+    BranchIfFalse,
 }
 
 struct StackTop {
@@ -161,6 +163,18 @@ fn exec_top_function(
                             captures,
                         }),
                     )))
+                }
+                StatementType::Branch | StatementType::BranchIfFalse => {
+                    let branch = if let StatementType::Branch = statement.s_type {
+                        true
+                    } else {
+                        !frame.arg_stack.pop().unwrap().to_bool()
+                    };
+
+                    if branch {
+                        let statement_num = function.code.len() - code_iter.as_slice().len();
+                        code_iter = function.code[statement_num + arg as usize..].iter();
+                    }
                 }
             }
         }
