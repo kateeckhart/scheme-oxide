@@ -171,7 +171,12 @@ fn exec_top_function(
 
 pub fn eval(object: SchemePair) -> Result<SchemeType, RuntimeError> {
     let function = MAIN_ENVIRONMENT.with(|env| compiler::compile_function(&env.frame, object));
-    let env = MAIN_ENVIRONMENT.with(|env| env.bounded.clone());
+    let env = MAIN_ENVIRONMENT.with(|env| {
+        env.bounded
+            .iter()
+            .map(|x| Rc::new(RefCell::new(x.clone())))
+            .collect::<Vec<_>>()
+    });
     exec_top_function(Rc::new(function?), env)
 }
 
