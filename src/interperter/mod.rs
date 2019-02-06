@@ -31,7 +31,7 @@ mod builtin;
 use builtin::BuiltinFunction;
 
 #[derive(Copy, Clone, Debug)]
-struct Statement {
+pub struct Statement {
     s_type: StatementType,
     arg: u32,
 }
