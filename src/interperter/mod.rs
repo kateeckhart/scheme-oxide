@@ -247,6 +247,10 @@ impl DerivedFunctionRef {
         stack: &mut Vec<StackFrame>,
         args: Vec<SchemeType>,
     ) -> Result<Option<SchemeType>, RuntimeError> {
+        if self.function.args as usize != args.len() {
+            return Err(RuntimeError::ArgError);
+        }
+
         let mut env = Vec::new();
         for arg in args {
             env.push(Rc::new(RefCell::new(arg)))
