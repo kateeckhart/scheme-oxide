@@ -41,6 +41,8 @@ enum StatementType {
     Get,
     Literal,
     Call,
+    Tail,
+    Discard,
     Lamada,
     Branch,
     BranchIfFalse,
@@ -133,20 +135,27 @@ fn exec_top_function(
                 StatementType::Literal => frame
                     .arg_stack
                     .push(function.literals[arg as usize].clone()),
-                StatementType::Call => {
+                StatementType::Call | StatementType::Tail => {
                     let statement_num = function.code.len() - code_iter.as_slice().len();
                     let mut drain = frame
                         .arg_stack
                         .drain(frame.arg_stack.len() - (arg as usize) - 1..);
                     let new_function = drain.next().unwrap();
                     let args = drain.collect::<Vec<_>>();
-                    stack.push(StackFrame {
-                        top: frame,
-                        statement_num,
-                        function: function.clone(),
-                    });
+
+                    if let StatementType::Call = statement.s_type {
+                        stack.push(StackFrame {
+                            top: frame,
+                            statement_num,
+                            function: function.clone(),
+                        });
+                    }
+
                     ret_expr = exec_function(new_function, &mut stack, args)?;
                     continue 'exec_loop;
+                }
+                StatementType::Discard => {
+                    frame.arg_stack.pop();
                 }
                 StatementType::Lamada => {
                     let child_function = function.lamadas[arg as usize].clone();

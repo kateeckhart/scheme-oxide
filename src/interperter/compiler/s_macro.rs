@@ -18,7 +18,8 @@
 */
 
 use super::{
-    generate_unspecified, CompilerAction, CompilerError, EnvironmentFrame, PartialFunction,
+    generate_unspecified, push_tail_body, CompilerAction, CompilerError, CompilerState,
+    EnvironmentFrame, PartialFunction,
 };
 use crate::interperter::{SchemeFunction, Statement, StatementType};
 use crate::types::*;
@@ -34,9 +35,10 @@ impl SchemeMacro {
         &self,
         args: NullableSchemePair,
         function: &mut PartialFunction,
+        state: CompilerState,
     ) -> Result<Vec<CompilerAction>, CompilerError> {
         match self {
-            SchemeMacro::Builtin(s_macro) => s_macro.expand(args, function),
+            SchemeMacro::Builtin(s_macro) => s_macro.expand(args, function, state),
         }
     }
 }
@@ -52,6 +54,7 @@ impl BuiltinMacro {
         &self,
         in_args: NullableSchemePair,
         function: &mut PartialFunction,
+        state: CompilerState,
     ) -> Result<Vec<CompilerAction>, CompilerError> {
         match self {
             BuiltinMacro::Lamada => {
@@ -84,7 +87,7 @@ impl BuiltinMacro {
                 function.parent = Some(Box::new(parent));
 
                 if let Some(code) = code_or_none.into_option() {
-                    Ok(vec![
+                    let mut ret = vec![
                         CompilerAction::EmitAsm {
                             statements: vec![Statement {
                                 arg: lamada_n as u32,
@@ -92,8 +95,9 @@ impl BuiltinMacro {
                             }],
                         },
                         CompilerAction::FunctionDone,
-                        CompilerAction::Compile { code },
-                    ])
+                    ];
+                    push_tail_body(code, &mut ret)?;
+                    Ok(ret)
                 } else {
                     Err(CompilerError::SyntaxError)
                 }
@@ -125,9 +129,11 @@ impl BuiltinMacro {
                     CompilerAction::IfCompileTrue {
                         true_expr: SchemePair::one(true_expr),
                         false_expr: SchemePair::one(false_expr),
+                        state,
                     },
                     CompilerAction::Compile {
                         code: SchemePair::one(test),
+                        state: CompilerState::Args,
                     },
                 ])
             }

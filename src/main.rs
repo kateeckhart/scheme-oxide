@@ -47,7 +47,7 @@ fn transpose_option<T, E>(option: Option<Result<T, E>>) -> Result<Option<T>, E> 
 }
 
 fn main() {
-    let token_stream = r#"(if #f ((lamada (x y z z8 z9) (- x y z z8 z9)) 1 -3 9 3 2) ())"#;
+    let token_stream = r#""ignore" (if #t ((lamada (x y z z8 z9) (- x y z z8 z9)) 1 -3 9 3 2) ())"#;
     let mut prog_factory = ListFactory::new();
     for object in Parser::new(io::Cursor::new(token_stream)) {
         prog_factory.push(object.unwrap())

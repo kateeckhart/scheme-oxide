@@ -18,6 +18,7 @@
 */
 
 use super::{SchemeFunction, Statement, StatementType};
+use crate::types::pair::{ListFactory, PairIterError};
 use crate::types::*;
 use std::collections::HashMap;
 use std::mem::replace;
@@ -90,6 +91,37 @@ fn generate_unspecified() -> SchemeType {
     SchemeType::Bool(false)
 }
 
+fn split_tail(pair: SchemePair) -> Result<(NullableSchemePair, SchemeType), PairIterError> {
+    let mut factory = ListFactory::new();
+    let mut iter = pair.iter();
+
+    let mut prev = iter.next().unwrap()?;
+
+    for next in iter {
+        factory.push(prev);
+        prev = next?
+    }
+
+    Ok((factory.build(), prev))
+}
+
+fn push_tail_body(code: SchemePair, stack: &mut Vec<CompilerAction>) -> Result<(), CompilerError> {
+    let (body, tail) = split_tail(code)?;
+
+    stack.push(CompilerAction::Compile {
+        code: SchemePair::one(tail),
+        state: CompilerState::Tail,
+    });
+
+    if let Some(body_exprs) = body.into_option() {
+        stack.push(CompilerAction::Compile {
+            code: body_exprs,
+            state: CompilerState::Body,
+        })
+    }
+    Ok(())
+}
+
 #[derive(Clone)]
 enum CompilerType {
     Runtime(u32),
@@ -159,10 +191,18 @@ impl PartialFunction {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum CompilerState {
+    Body,
+    Tail,
+    Args,
+}
+
 #[derive(Debug)]
 pub enum CompilerAction {
     Compile {
         code: SchemePair,
+        state: CompilerState,
     },
     FunctionDone,
     EmitAsm {
@@ -171,10 +211,12 @@ pub enum CompilerAction {
     IfCompileTrue {
         true_expr: SchemePair,
         false_expr: SchemePair,
+        state: CompilerState,
     },
     IfCompileFalse {
         test_asm: Vec<Statement>,
         false_expr: SchemePair,
+        state: CompilerState,
     },
     IfCompileDone {
         test_asm: Vec<Statement>,
@@ -186,10 +228,9 @@ pub fn compile_function(
     base_environment: &EnvironmentFrame,
     code: SchemePair,
 ) -> Result<SchemeFunction, CompilerError> {
-    let mut stack = vec![
-        CompilerAction::FunctionDone,
-        CompilerAction::Compile { code },
-    ];
+    let mut stack = vec![CompilerAction::FunctionDone];
+
+    push_tail_body(code, &mut stack)?;
 
     let mut function = PartialFunction {
         compiled_code: SchemeFunction::default(),
@@ -201,7 +242,7 @@ pub fn compile_function(
 
     'stack_loop: while let Some(action) = stack.pop() {
         match action {
-            CompilerAction::Compile { code } => {
+            CompilerAction::Compile { code, state } => {
                 let mut expr_iter = code.iter();
                 while let Some(expr_or_err) = expr_iter.next() {
                     let expr = expr_or_err?;
@@ -210,7 +251,7 @@ pub fn compile_function(
                         SchemeType::Pair(pair) => {
                             //Backup the rest of the expressions in this block
                             if let Some(rest) = expr_iter.get_rest()? {
-                                stack.push(CompilerAction::Compile { code: rest })
+                                stack.push(CompilerAction::Compile { code: rest, state })
                             }
 
                             let function_object = pair.get_car();
@@ -223,31 +264,52 @@ pub fn compile_function(
                                     current_code_block = Vec::new();
 
                                     stack.push(CompilerAction::EmitAsm { statements: code });
-                                    stack.append(&mut s_macro.expand(argv, &mut function)?);
+                                    stack.append(&mut s_macro.expand(
+                                        argv,
+                                        &mut function,
+                                        state,
+                                    )?);
                                     continue 'stack_loop;
                                 }
                             }
 
                             let argc = argv.len()?;
 
+                            let s_type = if let CompilerState::Tail = state {
+                                StatementType::Tail
+                            } else {
+                                StatementType::Call
+                            };
+
                             //Compile the call to the function
-                            stack.push(CompilerAction::EmitAsm {
-                                statements: vec![Statement {
-                                    s_type: StatementType::Call,
-                                    arg: argc as u32,
-                                }],
-                            });
+                            let mut statements = vec![Statement {
+                                s_type,
+                                arg: argc as u32,
+                            }];
+
+                            if let CompilerState::Body = state {
+                                statements.push(Statement {
+                                    s_type: StatementType::Discard,
+                                    arg: 0,
+                                })
+                            };
+
+                            stack.push(CompilerAction::EmitAsm { statements });
 
                             let function_name = SchemePair::one(pair.get_car());
 
                             //Compile the arguments to the function
                             if let Some(arguments) = argv.into_option() {
-                                stack.push(CompilerAction::Compile { code: arguments });
+                                stack.push(CompilerAction::Compile {
+                                    code: arguments,
+                                    state: CompilerState::Args,
+                                });
                             }
 
                             //Compile expression that evaluates to the function
                             stack.push(CompilerAction::Compile {
                                 code: function_name,
+                                state: CompilerState::Args,
                             });
 
                             continue 'stack_loop;
@@ -256,20 +318,26 @@ pub fn compile_function(
                             let ident_or_macro = function.lookup(&ident_name)?;
 
                             if let CompilerType::Runtime(ident) = ident_or_macro {
-                                current_code_block.push(Statement {
-                                    s_type: StatementType::Get,
-                                    arg: ident,
-                                })
+                                if let CompilerState::Body = state {
+                                } else {
+                                    current_code_block.push(Statement {
+                                        s_type: StatementType::Get,
+                                        arg: ident,
+                                    })
+                                }
                             } else {
                                 return Err(CompilerError::SyntaxError);
                             }
                         }
                         _ => {
-                            current_code_block.push(Statement {
-                                s_type: StatementType::Literal,
-                                arg: function.compiled_code.literals.len() as u32,
-                            });
-                            function.compiled_code.literals.push(expr);
+                            if let CompilerState::Body = state {
+                            } else {
+                                current_code_block.push(Statement {
+                                    s_type: StatementType::Literal,
+                                    arg: function.compiled_code.literals.len() as u32,
+                                });
+                                function.compiled_code.literals.push(expr);
+                            }
                         }
                     }
                 }
@@ -291,23 +359,32 @@ pub fn compile_function(
             CompilerAction::IfCompileTrue {
                 true_expr,
                 false_expr,
+                state,
             } => {
                 stack.push(CompilerAction::IfCompileFalse {
                     false_expr,
                     test_asm: current_code_block,
+                    state,
                 });
-                stack.push(CompilerAction::Compile { code: true_expr });
+                stack.push(CompilerAction::Compile {
+                    code: true_expr,
+                    state,
+                });
                 current_code_block = Vec::new();
             }
             CompilerAction::IfCompileFalse {
                 false_expr,
                 test_asm,
+                state,
             } => {
                 stack.push(CompilerAction::IfCompileDone {
                     test_asm,
                     true_asm: current_code_block,
                 });
-                stack.push(CompilerAction::Compile { code: false_expr });
+                stack.push(CompilerAction::Compile {
+                    code: false_expr,
+                    state,
+                });
                 current_code_block = Vec::new();
             }
             CompilerAction::IfCompileDone {
