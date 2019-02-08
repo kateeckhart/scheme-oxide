@@ -55,7 +55,7 @@ impl EnvironmentFrame {
     }
 
     pub fn add_builtin_macros(&mut self) {
-        self.push_macro("lamada", SchemeMacro::Builtin(BuiltinMacro::Lamada));
+        self.push_macro("lambda", SchemeMacro::Builtin(BuiltinMacro::Lambda));
         self.push_macro("if", SchemeMacro::Builtin(BuiltinMacro::If));
     }
 

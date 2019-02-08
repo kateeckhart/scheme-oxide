@@ -74,7 +74,7 @@ impl SchemeMacro {
 
 #[derive(Clone)]
 pub enum BuiltinMacro {
-    Lamada,
+    Lambda,
     If,
     //TODO: When syntax-rules is added, change into derived form.
     Let,
@@ -88,7 +88,7 @@ impl BuiltinMacro {
         state: CompilerState,
     ) -> Result<Vec<CompilerAction>, CompilerError> {
         match self {
-            BuiltinMacro::Lamada => {
+            BuiltinMacro::Lambda => {
                 let (args, code_or_none) = get_args(in_args, 1, 0, true)?;
 
                 let raw_formals = args[0].to_nullable_pair()?;
