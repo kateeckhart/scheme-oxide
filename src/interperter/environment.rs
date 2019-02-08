@@ -90,6 +90,11 @@ fn gen_scheme_environment() -> BaseEnvironment {
             mode: Ordering::Less,
         },
     );
+    ret.push_builtin_function("car", BuiltinFunction::Car);
+    ret.push_builtin_function("set_car!", BuiltinFunction::SetCar);
+    ret.push_builtin_function("set_cdr!", BuiltinFunction::SetCdr);
+    ret.push_builtin_function("cdr", BuiltinFunction::Cdr);
+    ret.push_builtin_function("cons", BuiltinFunction::Cons);
 
     ret
 }

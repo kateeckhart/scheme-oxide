@@ -17,13 +17,18 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use super::{RuntimeError, StackFrame};
+use super::{generate_unspecified, RuntimeError, StackFrame};
 use crate::types::*;
 use std::cmp::Ordering;
 
 #[derive(Debug, Copy, Clone)]
 pub enum BuiltinFunction {
     Add,
+    Cons,
+    Car,
+    Cdr,
+    SetCar,
+    SetCdr,
     Sub,
     Compare { invert: bool, mode: Ordering },
 }
@@ -73,6 +78,45 @@ impl BuiltinFunction {
                     current = num;
                 }
                 ret
+            }
+            BuiltinFunction::Cons => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                SchemePair::new(args.pop().unwrap(), args.pop().unwrap()).into()
+            }
+            BuiltinFunction::Car => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                args[0].to_pair()?.get_car()
+            }
+            BuiltinFunction::Cdr => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                args[1].to_pair()?.get_cdr()
+            }
+            BuiltinFunction::SetCar => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                args[0].to_pair()?.set_car(args[1].clone());
+
+                generate_unspecified()
+            }
+            BuiltinFunction::SetCdr => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                args[1].to_pair()?.set_cdr(args[1].clone());
+
+                generate_unspecified()
             }
         }))
     }
