@@ -87,15 +87,17 @@ impl BuiltinMacro {
                 function.parent = Some(Box::new(parent));
 
                 if let Some(code) = code_or_none.into_option() {
-                    let mut ret = vec![
-                        CompilerAction::EmitAsm {
+                    let mut ret = Vec::new();
+                    if let CompilerState::Body = state {
+                    } else {
+                        ret.push(CompilerAction::EmitAsm {
                             statements: vec![Statement {
                                 arg: lamada_n as u32,
                                 s_type: StatementType::Lamada,
                             }],
-                        },
-                        CompilerAction::FunctionDone,
-                    ];
+                        })
+                    }
+                    ret.push(CompilerAction::FunctionDone);
                     push_tail_body(code, &mut ret)?;
                     Ok(ret)
                 } else {
