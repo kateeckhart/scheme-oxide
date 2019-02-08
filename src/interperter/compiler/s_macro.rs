@@ -18,14 +18,18 @@
 */
 
 use super::{
-    generate_unspecified, push_tail_body, CompilerAction, CompilerError, CompilerState,
-    EnvironmentFrame, PartialFunction,
+    push_tail_body, CompilerAction, CompilerError, CompilerState, EnvironmentFrame, PartialFunction,
 };
-use crate::interperter::{SchemeFunction, Statement, StatementType};
+use crate::interperter::{generate_unspecified, SchemeFunction, Statement, StatementType};
 use crate::types::*;
 use std::mem::replace;
 
-fn get_args(in_args: NullableSchemePair, required_args: usize, optional_args: usize, vargs: bool) -> Result<(Vec<SchemeType>, NullableSchemePair), CompilerError> {
+fn get_args(
+    in_args: NullableSchemePair,
+    required_args: usize,
+    optional_args: usize,
+    vargs: bool,
+) -> Result<(Vec<SchemeType>, NullableSchemePair), CompilerError> {
     let mut ret = Vec::new();
     let mut arg_iter = in_args.iter();
 
@@ -48,7 +52,7 @@ fn get_args(in_args: NullableSchemePair, required_args: usize, optional_args: us
     let rest = arg_iter.get_rest()?;
 
     if !vargs && rest.clone().into_option().is_some() {
-        return Err(CompilerError::SyntaxError) 
+        return Err(CompilerError::SyntaxError);
     }
 
     Ok((ret, rest))

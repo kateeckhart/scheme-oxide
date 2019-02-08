@@ -87,22 +87,16 @@ fn unescape_string(string: &str) -> Result<String, ParserError> {
     Ok(new_string)
 }
 
-pub struct Parser<F>
-where
-    F: std::io::Read,
-{
+pub struct Parser<'a> {
     stack: Vec<ParserToken>,
-    tokenizer: Tokenizer<F>,
+    tokenizer: Tokenizer<'a>,
 }
 
-impl<F> Parser<F>
-where
-    F: std::io::Read,
-{
-    pub fn new(file: F) -> Self {
+impl<'a> Parser<'a> {
+    pub fn new(input: &'a str) -> Self {
         Parser {
             stack: Vec::new(),
-            tokenizer: Tokenizer::new(file),
+            tokenizer: Tokenizer::new(input),
         }
     }
 
@@ -155,16 +149,7 @@ where
     }
 }
 
-impl<'a> Parser<std::io::Cursor<&'a str>> {
-    fn from_string(string: &'a str) -> Self {
-        Self::new(std::io::Cursor::new(string))
-    }
-}
-
-impl<F> Iterator for Parser<F>
-where
-    F: std::io::Read,
-{
+impl<'a> Iterator for Parser<'a> {
     type Item = Result<SchemeType, ParserError>;
 
     fn next(&mut self) -> Option<Result<SchemeType, ParserError>> {

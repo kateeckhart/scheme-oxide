@@ -17,12 +17,8 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::io;
-
 mod parser;
-use crate::parser::Parser;
 mod types;
-use crate::types::pair::ListFactory;
 
 mod interperter;
 
@@ -47,11 +43,6 @@ fn transpose_option<T, E>(option: Option<Result<T, E>>) -> Result<Option<T>, E> 
 }
 
 fn main() {
-    let token_stream = r#""ignore" (if #t ((lambda (x y z z8 z9) (- x y z z8 z9)) 1 -3 9 3 2) ())"#;
-    let mut prog_factory = ListFactory::new();
-    for object in Parser::new(io::Cursor::new(token_stream)) {
-        prog_factory.push(object.unwrap())
-    }
-    let prog = prog_factory.build().into_option().unwrap();
+    let prog = r#""ignore" (if #t ((lambda (x y z z8 z9) (- x y z z8 z9)) 1 -3 9 3 2) ())"#;
     println!("{}", interperter::eval(prog).unwrap());
 }

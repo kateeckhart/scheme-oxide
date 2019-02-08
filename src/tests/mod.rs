@@ -17,35 +17,20 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::io;
-
-use crate::interperter::{self, RuntimeError};
-use crate::parser::Parser;
-use crate::types::pair::{ListFactory, PairIterError};
+use crate::interperter::eval;
+use crate::types::pair::PairIterError;
 use crate::types::*;
-
-fn eval_string(token_stream: &str) -> Result<SchemeType, RuntimeError> {
-    let mut prog_factory = ListFactory::new();
-    for object in Parser::new(io::Cursor::new(token_stream)) {
-        prog_factory.push(object.unwrap())
-    }
-    let prog = prog_factory.build().into_option().unwrap();
-    interperter::eval(prog)
-}
 
 #[test]
 fn add_zero() {
-    let res = eval_string("(+)").unwrap().to_number().unwrap();
+    let res = eval("(+)").unwrap().to_number().unwrap();
     assert_eq!(0, res);
 }
 
 #[test]
 fn add_one() {
     for x in 0..256 {
-        let res = eval_string(&format!("(+ {})", x))
-            .unwrap()
-            .to_number()
-            .unwrap();
+        let res = eval(&format!("(+ {})", x)).unwrap().to_number().unwrap();
         assert_eq!(x, res);
     }
 }
@@ -54,7 +39,7 @@ fn add_one() {
 fn add_two() {
     for x in 0..256 {
         for y in 0..256 {
-            let res = eval_string(&format!("(+ {} {})", x, y))
+            let res = eval(&format!("(+ {} {})", x, y))
                 .unwrap()
                 .to_number()
                 .unwrap();
@@ -68,7 +53,7 @@ fn add_three() {
     for x in 0..50 {
         for y in 0..50 {
             for z in 0..50 {
-                let res = eval_string(&format!("(+ {} {} {})", x, y, z))
+                let res = eval(&format!("(+ {} {} {})", x, y, z))
                     .unwrap()
                     .to_number()
                     .unwrap();

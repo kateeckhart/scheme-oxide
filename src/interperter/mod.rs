@@ -17,15 +17,18 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use crate::parser::{Parser, ParserError};
+use crate::types::pair::ListFactory;
 use crate::types::*;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::thread::LocalKey;
 
 mod compiler;
 pub use self::compiler::CompilerError;
 
 mod environment;
-use environment::MAIN_ENVIRONMENT;
+use environment::{BaseEnvironment, MAIN_ENVIRONMENT};
 
 mod builtin;
 use builtin::BuiltinFunction;
@@ -192,9 +195,29 @@ fn exec_top_function(
     Ok(ret_expr.unwrap())
 }
 
-pub fn eval(object: SchemePair) -> Result<SchemeType, RuntimeError> {
-    let function = MAIN_ENVIRONMENT.with(|env| compiler::compile_function(&env.frame, object));
-    let env = MAIN_ENVIRONMENT.with(|env| {
+fn generate_unspecified() -> SchemeType {
+    SchemeType::Bool(false)
+}
+
+fn eval_with_environment(
+    string: &str,
+    raw_env: &'static LocalKey<BaseEnvironment>,
+) -> Result<SchemeType, RuntimeError> {
+    let parser = Parser::new(string);
+    let mut object_builder = ListFactory::new();
+    for object in parser {
+        object_builder.push(object?)
+    }
+    let object_or_none = object_builder.build().into_option();
+
+    if object_or_none.is_none() {
+        return Ok(generate_unspecified());
+    }
+
+    let object = object_or_none.unwrap();
+
+    let function = raw_env.with(|env| compiler::compile_function(&env.frame, object));
+    let env = raw_env.with(|env| {
         env.bounded
             .iter()
             .map(|x| Rc::new(RefCell::new(x.clone())))
@@ -203,16 +226,27 @@ pub fn eval(object: SchemePair) -> Result<SchemeType, RuntimeError> {
     exec_top_function(Rc::new(function?), env)
 }
 
+pub fn eval(string: &str) -> Result<SchemeType, RuntimeError> {
+    eval_with_environment(string, &MAIN_ENVIRONMENT)
+}
+
 #[derive(Debug)]
 pub enum RuntimeError {
     TypeError,
     EvalError(CompilerError),
+    ReadError(ParserError),
     ArgError,
 }
 
 impl From<CompilerError> for RuntimeError {
     fn from(compile_err: CompilerError) -> RuntimeError {
         RuntimeError::EvalError(compile_err)
+    }
+}
+
+impl From<ParserError> for RuntimeError {
+    fn from(parse_err: ParserError) -> RuntimeError {
+        RuntimeError::ReadError(parse_err)
     }
 }
 

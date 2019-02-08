@@ -87,10 +87,6 @@ impl From<pair::PairIterError> for CompilerError {
     }
 }
 
-fn generate_unspecified() -> SchemeType {
-    SchemeType::Bool(false)
-}
-
 fn split_tail(pair: SchemePair) -> Result<(NullableSchemePair, SchemeType), PairIterError> {
     let mut factory = ListFactory::new();
     let mut iter = pair.iter();
