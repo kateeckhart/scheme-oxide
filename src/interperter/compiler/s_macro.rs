@@ -25,6 +25,35 @@ use crate::interperter::{SchemeFunction, Statement, StatementType};
 use crate::types::*;
 use std::mem::replace;
 
+fn get_args(in_args: NullableSchemePair, required_args: usize, optional_args: usize, vargs: bool) -> Result<(Vec<SchemeType>, NullableSchemePair), CompilerError> {
+    let mut ret = Vec::new();
+    let mut arg_iter = in_args.iter();
+
+    for _ in 0..required_args {
+        if let Some(x) = arg_iter.next() {
+            ret.push(x?)
+        } else {
+            return Err(CompilerError::SyntaxError);
+        }
+    }
+
+    for _ in 0..optional_args {
+        if let Some(x) = arg_iter.next() {
+            ret.push(x?)
+        } else {
+            break;
+        }
+    }
+
+    let rest = arg_iter.get_rest()?;
+
+    if !vargs && rest.clone().into_option().is_some() {
+        return Err(CompilerError::SyntaxError) 
+    }
+
+    Ok((ret, rest))
+}
+
 #[derive(Clone)]
 pub enum SchemeMacro {
     Builtin(BuiltinMacro),
@@ -47,6 +76,8 @@ impl SchemeMacro {
 pub enum BuiltinMacro {
     Lamada,
     If,
+    //TODO: When syntax-rules is added, change into derived form.
+    Let,
 }
 
 impl BuiltinMacro {
@@ -58,20 +89,14 @@ impl BuiltinMacro {
     ) -> Result<Vec<CompilerAction>, CompilerError> {
         match self {
             BuiltinMacro::Lamada => {
-                let args = if let Some(a) = in_args.into_option() {
-                    a
-                } else {
-                    return Err(CompilerError::SyntaxError);
-                };
+                let (args, code_or_none) = get_args(in_args, 1, 0, true)?;
 
-                let raw_formals = args.get_car().to_nullable_pair()?;
+                let raw_formals = args[0].to_nullable_pair()?;
                 let mut environment = EnvironmentFrame::new();
 
                 for raw_formal in raw_formals.iter() {
                     environment.new_object(&raw_formal?.to_symbol()?);
                 }
-
-                let code_or_none = args.get_cdr().to_nullable_pair()?;
 
                 let parent = replace(
                     function,
@@ -105,27 +130,16 @@ impl BuiltinMacro {
                 }
             }
             BuiltinMacro::If => {
-                let mut arg_iter = in_args.iter();
-                //Grab the two required params, the optional param, and the rest.
-                let (test, true_expr, false_expr_or_none, rest) = if let (Some(x), Some(y), z, z1) = (
-                    arg_iter.next(),
-                    arg_iter.next(),
-                    arg_iter.next(),
-                    arg_iter.next(),
-                ) {
-                    (x?, y?, z, z1)
-                } else {
-                    return Err(CompilerError::SyntaxError);
-                };
-                if rest.is_some() {
-                    return Err(CompilerError::SyntaxError);
-                };
+                let mut args = get_args(in_args, 2, 1, false)?.0;
 
-                let false_expr = if let Some(expr) = false_expr_or_none {
-                    expr?
+                let false_expr = if args.len() >= 3 {
+                    args.pop().unwrap()
                 } else {
                     generate_unspecified()
                 };
+
+                let true_expr = args.pop().unwrap();
+                let test = args.pop().unwrap();
 
                 Ok(vec![
                     CompilerAction::IfCompileTrue {
@@ -138,6 +152,9 @@ impl BuiltinMacro {
                         state: CompilerState::Args,
                     },
                 ])
+            }
+            BuiltinMacro::Let => {
+                unimplemented!();
             }
         }
     }

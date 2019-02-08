@@ -250,7 +250,7 @@ pub fn compile_function(
                         //Function call/Macro use
                         SchemeType::Pair(pair) => {
                             //Backup the rest of the expressions in this block
-                            if let Some(rest) = expr_iter.get_rest()? {
+                            if let Some(rest) = expr_iter.get_rest()?.into_option() {
                                 stack.push(CompilerAction::Compile { code: rest, state })
                             }
 

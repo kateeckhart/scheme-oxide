@@ -155,6 +155,12 @@ where
     }
 }
 
+impl<'a> Parser<std::io::Cursor<&'a str>> {
+    fn from_string(string: &'a str) -> Self {
+        Self::new(std::io::Cursor::new(string))
+    }
+}
+
 impl<F> Iterator for Parser<F>
 where
     F: std::io::Read,

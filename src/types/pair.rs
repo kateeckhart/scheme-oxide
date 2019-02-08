@@ -144,11 +144,11 @@ impl PairIter {
         }
     }
 
-    pub fn get_rest(&self) -> Result<Option<SchemePair>, PairIterError> {
+    pub fn get_rest(&self) -> Result<NullableSchemePair, PairIterError> {
         let object = self.pair.clone();
         match object {
-            SchemeType::Pair(pair) => Ok(Some(pair)),
-            SchemeType::EmptyList => Ok(None),
+            SchemeType::Pair(pair) => Ok(Some(pair).into()),
+            SchemeType::EmptyList => Ok(None.into()),
             _ => Err(PairIterError::Improper(object)),
         }
     }
