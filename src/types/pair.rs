@@ -218,4 +218,11 @@ impl ListFactory {
     pub fn build(self) -> NullableSchemePair {
         self.head.into()
     }
+
+    pub fn build_with_tail(self, object: SchemeType) -> NullableSchemePair {
+        if let Some(ref old_tail) = self.tail {
+            old_tail.set_cdr(object)
+        }
+        self.build()
+    }
 }

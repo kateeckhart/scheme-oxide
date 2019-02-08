@@ -21,6 +21,7 @@ use super::{
     push_tail_body, CompilerAction, CompilerError, CompilerState, EnvironmentFrame, PartialFunction,
 };
 use crate::interperter::{generate_unspecified, SchemeFunction, Statement, StatementType};
+use crate::types::pair::ListFactory;
 use crate::types::*;
 use std::mem::replace;
 
@@ -158,7 +159,43 @@ impl BuiltinMacro {
                 ])
             }
             BuiltinMacro::Let => {
-                unimplemented!();
+                let (mut arg_list, code) = get_args(in_args, 1, 0, true)?;
+
+                let definitions = arg_list.pop().unwrap().to_nullable_pair()?;
+
+                let mut lambda_def = ListFactory::new();
+                lambda_def.push(SchemeType::Symbol("lambda".to_string()));
+
+                let mut formals = Vec::new();
+                let mut bindings = Vec::new();
+
+                for definition in definitions.iter() {
+                    let mut def_list = get_args(definition?.to_nullable_pair()?, 2, 0, false)?.0;
+
+                    bindings.push(def_list.pop().unwrap());
+                    formals.push(def_list.pop().unwrap());
+                }
+
+                let mut formal_list = ListFactory::new();
+
+                for formal in formals {
+                    formal_list.push(formal)
+                }
+
+                lambda_def.push(formal_list.build().into());
+
+                let mut ret_list = ListFactory::new();
+
+                ret_list.push(lambda_def.build_with_tail(code.into()).into());
+
+                for binding in bindings {
+                    ret_list.push(binding)
+                }
+
+                Ok(vec![CompilerAction::Compile {
+                    code: SchemePair::one(ret_list.build().into()).into(),
+                    state,
+                }])
             }
         }
     }

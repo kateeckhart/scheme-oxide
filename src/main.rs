@@ -43,6 +43,6 @@ fn transpose_option<T, E>(option: Option<Result<T, E>>) -> Result<Option<T>, E> 
 }
 
 fn main() {
-    let prog = r#""ignore" (if #t ((lambda (x y z z8 z9) (- x y z z8 z9)) 1 -3 9 3 2) ())"#;
+    let prog = r#""ignore" (if #t (let ((x 1) (y -3) (z 9) (z8 3) (z9 2)) (- x y z z8 z9)) ())"#;
     println!("{}", interperter::eval(prog).unwrap());
 }
