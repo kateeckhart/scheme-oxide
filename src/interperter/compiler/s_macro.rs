@@ -18,7 +18,8 @@
 */
 
 use super::{
-    push_tail_body, CompilerAction, CompilerError, CompilerState, EnvironmentFrame, PartialFunction,
+    push_tail_body, CompilerAction, CompilerError, CompilerState, CompilerType, EnvironmentFrame,
+    PartialFunction,
 };
 use crate::interperter::{generate_unspecified, SchemeFunction, Statement, StatementType};
 use crate::types::pair::ListFactory;
@@ -81,6 +82,8 @@ impl SchemeMacro {
 pub enum BuiltinMacro {
     Lambda,
     If,
+    Set,
+    Begin,
     //TODO: When syntax-rules is added, change into derived form.
     Let,
 }
@@ -158,6 +161,51 @@ impl BuiltinMacro {
                     },
                 ])
             }
+            BuiltinMacro::Set => {
+                let mut args = get_args(in_args, 2, 0, false)?.0;
+
+                let expr = args.pop().unwrap();
+                let var = args.pop().unwrap().to_symbol()?;
+
+                let var_id = if let CompilerType::Runtime(x) = function.lookup(&var)? {
+                    x
+                } else {
+                    return Err(CompilerError::SyntaxError);
+                };
+
+                let mut statements = Vec::new();
+
+                if let CompilerState::Body = state {
+                } else {
+                    statements.push(Statement {
+                        s_type: StatementType::PushUnspecified,
+                        arg: 0,
+                    });
+                }
+
+                statements.push(Statement {
+                    s_type: StatementType::Set,
+                    arg: var_id,
+                });
+
+                Ok(vec![
+                    CompilerAction::EmitAsm { statements },
+                    CompilerAction::Compile {
+                        code: SchemePair::one(expr),
+                        state: CompilerState::Args,
+                    },
+                ])
+            }
+            BuiltinMacro::Begin => {
+                let mut ret = ListFactory::new();
+                ret.push(SchemeType::Symbol("let".to_string()));
+                ret.push(SchemeType::EmptyList);
+
+                Ok(vec![CompilerAction::Compile {
+                    code: SchemePair::one(ret.build_with_tail(in_args.into()).into()),
+                    state,
+                }])
+            }
             BuiltinMacro::Let => {
                 let (mut arg_list, code) = get_args(in_args, 1, 0, true)?;
 
@@ -193,7 +241,7 @@ impl BuiltinMacro {
                 }
 
                 Ok(vec![CompilerAction::Compile {
-                    code: SchemePair::one(ret_list.build().into()).into(),
+                    code: SchemePair::one(ret_list.build().into()),
                     state,
                 }])
             }

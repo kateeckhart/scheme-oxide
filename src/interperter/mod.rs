@@ -42,10 +42,12 @@ pub struct Statement {
 #[derive(Copy, Clone, Debug)]
 enum StatementType {
     Get,
+    Set,
     Literal,
     Call,
     Tail,
     Discard,
+    PushUnspecified,
     Lamada,
     Branch,
     BranchIfFalse,
@@ -135,6 +137,9 @@ fn exec_top_function(
                 StatementType::Get => frame
                     .arg_stack
                     .push(frame.vars[arg as usize].borrow().clone()),
+                StatementType::Set => {
+                    frame.vars[arg as usize].replace(frame.arg_stack.pop().unwrap());
+                }
                 StatementType::Literal => frame
                     .arg_stack
                     .push(function.literals[arg as usize].clone()),
@@ -160,6 +165,7 @@ fn exec_top_function(
                 StatementType::Discard => {
                     frame.arg_stack.pop();
                 }
+                StatementType::PushUnspecified => frame.arg_stack.push(generate_unspecified()),
                 StatementType::Lamada => {
                     let child_function = function.lamadas[arg as usize].clone();
 
