@@ -17,7 +17,7 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use super::{generate_unspecified, RuntimeError, StackFrame};
+use super::{environment::GEN_UNSPECIFIED, RuntimeError, StackFrame};
 use crate::types::*;
 use std::cmp::Ordering;
 
@@ -36,29 +36,29 @@ pub enum BuiltinFunction {
 impl BuiltinFunction {
     pub fn call(
         self,
-        _: &mut Vec<StackFrame>,
+        stack: &mut Vec<StackFrame>,
         mut args: Vec<SchemeType>,
     ) -> Result<Option<SchemeType>, RuntimeError> {
-        Ok(Some(match self {
+        match self {
             BuiltinFunction::Add => {
                 let mut sum = 0;
                 for num in args {
                     sum += num.to_number()?
                 }
-                SchemeType::Number(sum)
+                Ok(Some(SchemeType::Number(sum)))
             }
             BuiltinFunction::Sub => {
                 if args.len() == 1 {
-                    SchemeType::Number(-args[0].to_number()?)
+                    Ok(Some(SchemeType::Number(-args[0].to_number()?)))
                 } else if args.len() > 1 {
                     let mut iter = args.drain(..);
                     let mut difference = iter.next().unwrap().to_number()?;
                     for number in iter {
                         difference -= number.to_number()?
                     }
-                    SchemeType::Number(difference)
+                    Ok(Some(SchemeType::Number(difference)))
                 } else {
-                    return Err(RuntimeError::ArgError);
+                    Err(RuntimeError::ArgError)
                 }
             }
             BuiltinFunction::Compare { invert, mode } => {
@@ -77,28 +77,30 @@ impl BuiltinFunction {
                     }
                     current = num;
                 }
-                ret
+                Ok(Some(ret))
             }
             BuiltinFunction::Cons => {
                 if args.len() != 2 {
                     return Err(RuntimeError::ArgError);
                 }
 
-                SchemePair::new(args.pop().unwrap(), args.pop().unwrap()).into()
+                Ok(Some(
+                    SchemePair::new(args.pop().unwrap(), args.pop().unwrap()).into(),
+                ))
             }
             BuiltinFunction::Car => {
                 if args.len() != 1 {
                     return Err(RuntimeError::ArgError);
                 }
 
-                args[0].to_pair()?.get_car()
+                Ok(Some(args[0].to_pair()?.get_car()))
             }
             BuiltinFunction::Cdr => {
                 if args.len() != 1 {
                     return Err(RuntimeError::ArgError);
                 }
 
-                args[1].to_pair()?.get_cdr()
+                Ok(Some(args[1].to_pair()?.get_cdr()))
             }
             BuiltinFunction::SetCar => {
                 if args.len() != 2 {
@@ -107,7 +109,7 @@ impl BuiltinFunction {
 
                 args[0].to_pair()?.set_car(args[1].clone());
 
-                generate_unspecified()
+                GEN_UNSPECIFIED.with(|gen| gen.clone().0.call(stack, Vec::new()))
             }
             BuiltinFunction::SetCdr => {
                 if args.len() != 2 {
@@ -116,8 +118,8 @@ impl BuiltinFunction {
 
                 args[1].to_pair()?.set_cdr(args[1].clone());
 
-                generate_unspecified()
+                GEN_UNSPECIFIED.with(|gen| gen.clone().0.call(stack, Vec::new()))
             }
-        }))
+        }
     }
 }

@@ -48,6 +48,6 @@ fn main() {
   (begin
     (set! x 0)
     (- x y z z8 z9)
-)) ())"#;
+)))"#;
     println!("{}", interperter::eval(prog).unwrap());
 }

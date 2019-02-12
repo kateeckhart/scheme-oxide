@@ -22,7 +22,6 @@ use crate::types::pair::ListFactory;
 use crate::types::*;
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::thread::LocalKey;
 
 mod compiler;
 pub use self::compiler::CompilerError;
@@ -47,7 +46,6 @@ enum StatementType {
     Call,
     Tail,
     Discard,
-    PushUnspecified,
     Lamada,
     Branch,
     BranchIfFalse,
@@ -165,7 +163,6 @@ fn exec_top_function(
                 StatementType::Discard => {
                     frame.arg_stack.pop();
                 }
-                StatementType::PushUnspecified => frame.arg_stack.push(generate_unspecified()),
                 StatementType::Lamada => {
                     let child_function = function.lamadas[arg as usize].clone();
 
@@ -201,14 +198,7 @@ fn exec_top_function(
     Ok(ret_expr.unwrap())
 }
 
-fn generate_unspecified() -> SchemeType {
-    SchemeType::Bool(false)
-}
-
-fn eval_with_environment(
-    string: &str,
-    raw_env: &'static LocalKey<BaseEnvironment>,
-) -> Result<SchemeType, RuntimeError> {
+fn eval_with_environment(string: &str, env: &BaseEnvironment) -> Result<SchemeType, RuntimeError> {
     let parser = Parser::new(string);
     let mut object_builder = ListFactory::new();
     for object in parser {
@@ -217,23 +207,23 @@ fn eval_with_environment(
     let object_or_none = object_builder.build().into_option();
 
     if object_or_none.is_none() {
-        return Ok(generate_unspecified());
+        return eval("($gen_unspecified)");
     }
 
     let object = object_or_none.unwrap();
 
-    let function = raw_env.with(|env| compiler::compile_function(&env.frame, object));
-    let env = raw_env.with(|env| {
-        env.bounded
-            .iter()
-            .map(|x| Rc::new(RefCell::new(x.clone())))
-            .collect::<Vec<_>>()
-    });
-    exec_top_function(Rc::new(function?), env)
+    let function = compiler::compile_function(&env.frame, object);
+    let env_vars = env
+        .bounded
+        .iter()
+        .map(|x| Rc::new(RefCell::new(x.clone())))
+        .collect::<Vec<_>>();
+
+    exec_top_function(Rc::new(function?), env_vars)
 }
 
 pub fn eval(string: &str) -> Result<SchemeType, RuntimeError> {
-    eval_with_environment(string, &MAIN_ENVIRONMENT)
+    MAIN_ENVIRONMENT.with(|env| eval_with_environment(string, &env))
 }
 
 #[derive(Debug)]

@@ -117,3 +117,9 @@ impl From<NullableSchemePair> for SchemeType {
         }
     }
 }
+
+impl From<FunctionRef> for SchemeType {
+    fn from(func: FunctionRef) -> Self {
+        SchemeType::Function(func)
+    }
+}

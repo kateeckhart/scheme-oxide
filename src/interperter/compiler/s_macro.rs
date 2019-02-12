@@ -21,7 +21,7 @@ use super::{
     push_tail_body, CompilerAction, CompilerError, CompilerState, CompilerType, EnvironmentFrame,
     PartialFunction,
 };
-use crate::interperter::{generate_unspecified, SchemeFunction, Statement, StatementType};
+use crate::interperter::{SchemeFunction, Statement, StatementType};
 use crate::types::pair::ListFactory;
 use crate::types::*;
 use std::mem::replace;
@@ -143,7 +143,7 @@ impl BuiltinMacro {
                 let false_expr = if args.len() >= 3 {
                     args.pop().unwrap()
                 } else {
-                    generate_unspecified()
+                    SchemePair::one(SchemeType::Symbol("$gen_unspecified".to_string())).into()
                 };
 
                 let true_expr = args.pop().unwrap();
@@ -173,23 +173,24 @@ impl BuiltinMacro {
                     return Err(CompilerError::SyntaxError);
                 };
 
-                let mut statements = Vec::new();
+                let mut ret = Vec::new();
 
                 if let CompilerState::Body = state {
                 } else {
-                    statements.push(Statement {
-                        s_type: StatementType::PushUnspecified,
-                        arg: 0,
+                    ret.push(CompilerAction::Compile {
+                        code: SchemePair::one(SchemeType::Symbol("$gen_unspecified".to_string()))
+                            .into(),
+                        state,
                     });
                 }
 
-                statements.push(Statement {
-                    s_type: StatementType::Set,
-                    arg: var_id,
-                });
-
                 Ok(vec![
-                    CompilerAction::EmitAsm { statements },
+                    CompilerAction::EmitAsm {
+                        statements: vec![Statement {
+                            s_type: StatementType::Set,
+                            arg: var_id,
+                        }],
+                    },
                     CompilerAction::Compile {
                         code: SchemePair::one(expr),
                         state: CompilerState::Args,

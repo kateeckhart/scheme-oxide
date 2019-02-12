@@ -17,7 +17,10 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use super::{compiler::EnvironmentFrame, BuiltinFunction, FunctionRef, FunctionRefInner};
+use super::{
+    compiler::EnvironmentFrame, eval_with_environment, BuiltinFunction, FunctionRef,
+    FunctionRefInner, RuntimeError,
+};
 use crate::types::*;
 use std::cmp::Ordering;
 
@@ -44,6 +47,19 @@ impl BaseEnvironment {
             name,
             SchemeType::Function(FunctionRef(FunctionRefInner::Builtin(function))),
         )
+    }
+
+    fn push_eval(&mut self, name: &str, expressions: &str) -> Result<(), RuntimeError> {
+        let object = eval_with_environment(expressions, self)?;
+
+        self.push_object(name, object);
+        Ok(())
+    }
+
+    fn lookup(&self, name: &str) -> Option<SchemeType> {
+        self.frame
+            .lookup_runtime(name)
+            .map(|id| self.bounded[id as usize].clone())
     }
 }
 
@@ -96,6 +112,8 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_builtin_function("cdr", BuiltinFunction::Cdr);
     ret.push_builtin_function("cons", BuiltinFunction::Cons);
 
+    ret.push_eval("$gen_unspecified", "(lambda () #f)").unwrap();
+
     ret
 }
 
@@ -103,8 +121,20 @@ fn gen_main_environment() -> BaseEnvironment {
     gen_scheme_environment()
 }
 
+fn get_function_from_env(name: &str) -> FunctionRef {
+    MAIN_ENVIRONMENT.with(|env| {
+        if let Some(SchemeType::Function(s_ref)) = env.lookup(name) {
+            s_ref
+        } else {
+            panic!()
+        }
+    })
+}
+
 thread_local! {
     pub static SCHEME_ENVIORNMENT: BaseEnvironment = gen_scheme_environment();
 
     pub static MAIN_ENVIRONMENT: BaseEnvironment = gen_main_environment();
+
+    pub static GEN_UNSPECIFIED: FunctionRef = get_function_from_env("$gen_unspecified");
 }

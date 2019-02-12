@@ -69,6 +69,14 @@ impl EnvironmentFrame {
     fn lookup(&self, name: &str) -> Option<CompilerType> {
         self.map.get(name).cloned()
     }
+
+    pub fn lookup_runtime(&self, name: &str) -> Option<u32> {
+        if let Some(CompilerType::Runtime(runtime)) = self.lookup(name) {
+            Some(runtime)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug)]
