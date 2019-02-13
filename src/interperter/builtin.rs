@@ -121,9 +121,7 @@ impl BuiltinFunction {
 
                 BuiltinFunction::GenUnspecified.call(stack, Vec::new())
             }
-            BuiltinFunction::GenUnspecified => {
-                Ok(Some(SchemeType::Bool(false)))
-            }
+            BuiltinFunction::GenUnspecified => Ok(Some(SchemeType::Bool(false))),
         }
     }
 }

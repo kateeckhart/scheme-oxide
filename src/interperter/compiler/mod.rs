@@ -60,6 +60,8 @@ impl EnvironmentFrame {
         self.push_macro("let", SchemeMacro::Builtin(BuiltinMacro::Let));
         self.push_macro("begin", SchemeMacro::Builtin(BuiltinMacro::Begin));
         self.push_macro("set!", SchemeMacro::Builtin(BuiltinMacro::Set));
+        self.push_macro("or", SchemeMacro::Builtin(BuiltinMacro::Or));
+        self.push_macro("and", SchemeMacro::Builtin(BuiltinMacro::And));
     }
 
     fn push_macro(&mut self, name: &str, s_macro: SchemeMacro) {
@@ -68,14 +70,6 @@ impl EnvironmentFrame {
 
     fn lookup(&self, name: &str) -> Option<CompilerType> {
         self.map.get(name).cloned()
-    }
-
-    pub fn lookup_runtime(&self, name: &str) -> Option<u32> {
-        if let Some(CompilerType::Runtime(runtime)) = self.lookup(name) {
-            Some(runtime)
-        } else {
-            None
-        }
     }
 }
 

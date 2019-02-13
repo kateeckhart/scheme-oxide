@@ -55,12 +55,6 @@ impl BaseEnvironment {
         self.push_object(name, object);
         Ok(())
     }
-
-    fn lookup(&self, name: &str) -> Option<SchemeType> {
-        self.frame
-            .lookup_runtime(name)
-            .map(|id| self.bounded[id as usize].clone())
-    }
 }
 
 fn gen_scheme_environment() -> BaseEnvironment {

@@ -86,6 +86,8 @@ pub enum BuiltinMacro {
     Begin,
     //TODO: When syntax-rules is added, change into derived form.
     Let,
+    Or,
+    And,
 }
 
 impl BuiltinMacro {
@@ -178,8 +180,7 @@ impl BuiltinMacro {
                 if let CompilerState::Body = state {
                 } else {
                     ret.push(CompilerAction::Compile {
-                        code: SchemePair::one(SchemeType::Symbol("$gen_unspecified".to_string()))
-                            .into(),
+                        code: SchemePair::one(SchemeType::Symbol("$gen_unspecified".to_string())),
                         state,
                     });
                 }
@@ -243,6 +244,82 @@ impl BuiltinMacro {
 
                 Ok(vec![CompilerAction::Compile {
                     code: SchemePair::one(ret_list.build().into()),
+                    state,
+                }])
+            }
+            BuiltinMacro::And => {
+                let (mut arg_list, rest) = get_args(in_args, 0, 2, true)?;
+
+                let expr = if arg_list.is_empty() {
+                    SchemeType::Bool(true)
+                } else if arg_list.len() == 1 {
+                    arg_list.pop().unwrap()
+                } else {
+                    let mut ret_list = ListFactory::new();
+
+                    ret_list.push(SchemeType::Symbol("if".to_string()));
+
+                    ret_list.push(arg_list.remove(0));
+
+                    let mut and_list = ListFactory::new();
+
+                    and_list.push(SchemeType::Symbol("and".to_string()));
+
+                    and_list.push(arg_list.pop().unwrap());
+
+                    ret_list.push(and_list.build_with_tail(rest.into()).into());
+
+                    ret_list.push(SchemeType::Bool(false));
+
+                    ret_list.build().into()
+                };
+
+                Ok(vec![CompilerAction::Compile {
+                    code: SchemePair::one(expr),
+                    state,
+                }])
+            }
+            BuiltinMacro::Or => {
+                let (mut arg_list, rest) = get_args(in_args, 0, 2, true)?;
+
+                let expr = if arg_list.is_empty() {
+                    SchemeType::Bool(false)
+                } else if arg_list.len() == 1 {
+                    arg_list.pop().unwrap()
+                } else {
+                    let mut ret_list = ListFactory::new();
+
+                    ret_list.push(SchemeType::Symbol("let".to_string()));
+
+                    let mut binding_list = ListFactory::new();
+
+                    binding_list.push(SchemeType::Symbol("$or$expanded$x".to_string()));
+                    binding_list.push(arg_list.remove(0));
+
+                    let bindings = SchemePair::one(binding_list.build().into());
+
+                    ret_list.push(bindings.into());
+
+                    let mut if_list = ListFactory::new();
+
+                    if_list.push(SchemeType::Symbol("if".to_string()));
+                    if_list.push(SchemeType::Symbol("$or$expanded$x".to_string()));
+                    if_list.push(SchemeType::Symbol("$or$expanded$x".to_string()));
+
+                    let mut or_list = ListFactory::new();
+
+                    or_list.push(SchemeType::Symbol("or".to_string()));
+                    or_list.push(arg_list.pop().unwrap());
+
+                    if_list.push(or_list.build_with_tail(rest.into()).into());
+
+                    ret_list.push(if_list.build().into());
+
+                    ret_list.build().into()
+                };
+
+                Ok(vec![CompilerAction::Compile {
+                    code: SchemePair::one(expr),
                     state,
                 }])
             }
