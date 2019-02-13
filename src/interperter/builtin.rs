@@ -17,7 +17,7 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use super::{environment::GEN_UNSPECIFIED, RuntimeError, StackFrame};
+use super::{RuntimeError, StackFrame};
 use crate::types::*;
 use std::cmp::Ordering;
 
@@ -31,6 +31,7 @@ pub enum BuiltinFunction {
     SetCdr,
     Sub,
     Compare { invert: bool, mode: Ordering },
+    GenUnspecified,
 }
 
 impl BuiltinFunction {
@@ -109,7 +110,7 @@ impl BuiltinFunction {
 
                 args[0].to_pair()?.set_car(args[1].clone());
 
-                GEN_UNSPECIFIED.with(|gen| gen.clone().0.call(stack, Vec::new()))
+                BuiltinFunction::GenUnspecified.call(stack, Vec::new())
             }
             BuiltinFunction::SetCdr => {
                 if args.len() != 2 {
@@ -118,7 +119,10 @@ impl BuiltinFunction {
 
                 args[1].to_pair()?.set_cdr(args[1].clone());
 
-                GEN_UNSPECIFIED.with(|gen| gen.clone().0.call(stack, Vec::new()))
+                BuiltinFunction::GenUnspecified.call(stack, Vec::new())
+            }
+            BuiltinFunction::GenUnspecified => {
+                Ok(Some(SchemeType::Bool(false)))
             }
         }
     }

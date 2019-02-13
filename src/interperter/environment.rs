@@ -112,7 +112,7 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_builtin_function("cdr", BuiltinFunction::Cdr);
     ret.push_builtin_function("cons", BuiltinFunction::Cons);
 
-    ret.push_eval("$gen_unspecified", "(lambda () #f)").unwrap();
+    ret.push_builtin_function("$gen_unspecified", BuiltinFunction::GenUnspecified);
 
     ret
 }
@@ -121,20 +121,8 @@ fn gen_main_environment() -> BaseEnvironment {
     gen_scheme_environment()
 }
 
-fn get_function_from_env(name: &str) -> FunctionRef {
-    MAIN_ENVIRONMENT.with(|env| {
-        if let Some(SchemeType::Function(s_ref)) = env.lookup(name) {
-            s_ref
-        } else {
-            panic!()
-        }
-    })
-}
-
 thread_local! {
     pub static SCHEME_ENVIORNMENT: BaseEnvironment = gen_scheme_environment();
 
     pub static MAIN_ENVIRONMENT: BaseEnvironment = gen_main_environment();
-
-    pub static GEN_UNSPECIFIED: FunctionRef = get_function_from_env("$gen_unspecified");
 }
