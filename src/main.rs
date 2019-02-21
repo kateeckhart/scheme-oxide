@@ -17,6 +17,11 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use getopts::Options;
+use std::env;
+use std::fs::File;
+use std::io::prelude::*;
+
 mod parser;
 mod types;
 
@@ -42,12 +47,35 @@ fn transpose_option<T, E>(option: Option<Result<T, E>>) -> Result<Option<T>, E> 
     }
 }
 
+fn print_usage(name: &str) {
+    println!("Usage: {} PROGRAM", name)
+}
+
 fn main() {
-    let prog = r#"
-(if (or #f #f (and #t #t)) (let ((x 1) (y -3) (z 9) (z8 3) (z9 2))
-  (begin
-    (set! x 0)
-    (- x y z z8 z9)
-)))"#;
-    println!("{}", interperter::eval(prog).unwrap());
+    let args = env::args().collect::<Vec<_>>();
+    let self_name = args[0].clone();
+
+    let opts = Options::new();
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => m,
+        Err(e) => panic!(e.to_string()),
+    };
+
+    let file_name = if matches.free.len() == 1 {
+        matches.free[1].clone()
+    } else if matches.free.len() == 0 {
+        print_usage(&self_name);
+        return;
+    } else {
+        print_usage(&self_name);
+        println!();
+        println!("Only one file must be specified");
+        return;
+    };
+
+    let mut file = File::open(file_name).unwrap();
+    let mut prog = String::new();
+    file.read_to_string(&mut prog).unwrap();
+
+    println!("{}", interperter::eval(&prog).unwrap());
 }
