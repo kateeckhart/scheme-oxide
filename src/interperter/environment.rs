@@ -108,6 +108,17 @@ fn gen_scheme_environment() -> BaseEnvironment {
 
     ret.push_builtin_function("eqv?", BuiltinFunction::Eqv);
     ret.push_eval("eq?", "(lambda (x y) (eqv? x y))").unwrap();
+    ret.push_eval("not", "(lambda (x) (if x #f #t))").unwrap();
+    ret.push_eval("boolean?", "(lambda (x) (or (eqv? x #t) (eqv? x #f)))")
+        .unwrap();
+    ret.push_eval("null?", "(lambda (x) (eqv? x ()))").unwrap();
+
+    ret.push_eval("zero?", "(lambda (x) (= x 0))").unwrap();
+    ret.push_eval("positive?", "(lambda (x) (> x 0))").unwrap();
+    ret.push_eval("negative?", "(lambda (x) (< x 0))").unwrap();
+
+    ret.push_eval("abs", "(lambda (x) (if (negative? x) (- x) x))")
+        .unwrap();
 
     ret.push_builtin_function("$gen_unspecified", BuiltinFunction::GenUnspecified);
 
