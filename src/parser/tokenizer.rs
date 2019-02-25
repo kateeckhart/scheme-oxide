@@ -20,9 +20,6 @@
 use lazy_static::lazy_static;
 use regex::Regex;
 
-#[cfg(test)]
-mod tests;
-
 #[derive(Debug, Eq, PartialEq)]
 pub enum Block {
     Start,
