@@ -106,6 +106,9 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_builtin_function("cdr", BuiltinFunction::Cdr);
     ret.push_builtin_function("cons", BuiltinFunction::Cons);
 
+    ret.push_builtin_function("eqv?", BuiltinFunction::Eqv);
+    ret.push_eval("eq?", "(lambda (x y) (eqv? x y))").unwrap();
+
     ret.push_builtin_function("$gen_unspecified", BuiltinFunction::GenUnspecified);
 
     ret

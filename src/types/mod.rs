@@ -23,7 +23,7 @@ pub mod pair;
 pub use self::pair::{NullableSchemePair, SchemePair};
 use crate::interperter::FunctionRef;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum SchemeType {
     Pair(SchemePair),
     Function(FunctionRef),

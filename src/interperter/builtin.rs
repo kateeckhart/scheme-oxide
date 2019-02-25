@@ -21,7 +21,7 @@ use super::{RuntimeError, StackFrame};
 use crate::types::*;
 use std::cmp::Ordering;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum BuiltinFunction {
     Add,
     Cons,
@@ -31,6 +31,7 @@ pub enum BuiltinFunction {
     SetCdr,
     Sub,
     Compare { invert: bool, mode: Ordering },
+    Eqv,
     GenUnspecified,
 }
 
@@ -120,6 +121,13 @@ impl BuiltinFunction {
                 args[1].to_pair()?.set_cdr(args[1].clone());
 
                 BuiltinFunction::GenUnspecified.call(stack, Vec::new())
+            }
+            BuiltinFunction::Eqv => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                Ok(Some(SchemeType::Bool(args[0] == args[1])))
             }
             BuiltinFunction::GenUnspecified => Ok(Some(SchemeType::Bool(false))),
         }

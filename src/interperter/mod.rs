@@ -252,10 +252,10 @@ impl From<CastError> for RuntimeError {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FunctionRef(FunctionRefInner);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum FunctionRefInner {
     Derived(DerivedFunctionRef),
     Builtin(BuiltinFunction),
@@ -278,6 +278,24 @@ impl FunctionRefInner {
 struct DerivedFunctionRef {
     function: Rc<SchemeFunction>,
     captures: Vec<Rc<RefCell<SchemeType>>>,
+}
+
+impl PartialEq for DerivedFunctionRef {
+    fn eq(&self, other: &DerivedFunctionRef) -> bool {
+        if !Rc::ptr_eq(&self.function, &other.function)
+            || self.captures.len() != other.captures.len()
+        {
+            return false;
+        }
+
+        for (self_capture, other_capture) in self.captures.iter().zip(&other.captures) {
+            if !Rc::ptr_eq(self_capture, other_capture) {
+                return false;
+            }
+        }
+
+        true
+    }
 }
 
 impl DerivedFunctionRef {

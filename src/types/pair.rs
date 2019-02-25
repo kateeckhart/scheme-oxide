@@ -25,6 +25,12 @@ use std::rc::Rc;
 #[derive(Clone, Debug)]
 pub struct SchemePair(Rc<RefCell<(SchemeType, SchemeType)>>);
 
+impl PartialEq for SchemePair {
+    fn eq(&self, other: &SchemePair) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 impl Display for SchemePair {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         write!(f, "(")?;
@@ -170,7 +176,7 @@ impl Iterator for PairIter {
                 self.pair = pair.get_cdr();
 
                 if let Ok(tort) = self.tortoise.clone().to_pair() {
-                    if Rc::ptr_eq(&pair.0, &tort.0) {
+                    if pair == tort {
                         return Some(Err(PairIterError::Circular));
                     }
 
