@@ -107,6 +107,9 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_builtin_function("cons", BuiltinFunction::Cons);
 
     ret.push_builtin_function("eqv?", BuiltinFunction::Eqv);
+    ret.push_builtin_function("quotient", BuiltinFunction::Quotient);
+    ret.push_builtin_function("remainder", BuiltinFunction::Remainder);
+
     ret.push_eval("eq?", "(lambda (x y) (eqv? x y))").unwrap();
     ret.push_eval("not", "(lambda (x) (if x #f #t))").unwrap();
     ret.push_eval("boolean?", "(lambda (x) (or (eqv? x #t) (eqv? x #f)))")

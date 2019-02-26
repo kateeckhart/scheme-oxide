@@ -32,6 +32,8 @@ pub enum BuiltinFunction {
     Sub,
     Compare { invert: bool, mode: Ordering },
     Eqv,
+    Quotient,
+    Remainder,
     GenUnspecified,
 }
 
@@ -129,6 +131,28 @@ impl BuiltinFunction {
 
                 Ok(Some(SchemeType::Bool(args[0] == args[1])))
             }
+            BuiltinFunction::Quotient | BuiltinFunction::Remainder => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                let mut iter = args.iter();
+                let a = iter.next().unwrap().to_number()?;
+                let b = iter.next().unwrap().to_number()?;
+
+                if b == 0 {
+                    return Err(RuntimeError::DivByZero);
+                }
+
+                let res = match self {
+                    BuiltinFunction::Quotient => a / b,
+                    BuiltinFunction::Remainder => a % b,
+                    _ => unreachable!(),
+                };
+
+                Ok(Some(SchemeType::Number(res)))
+            }
+
             BuiltinFunction::GenUnspecified => Ok(Some(SchemeType::Bool(false))),
         }
     }

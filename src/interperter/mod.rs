@@ -228,6 +228,7 @@ pub fn eval(string: &str) -> Result<SchemeType, RuntimeError> {
 
 #[derive(Debug)]
 pub enum RuntimeError {
+    DivByZero,
     TypeError,
     EvalError(CompilerError),
     ReadError(ParserError),
