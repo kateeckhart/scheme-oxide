@@ -62,6 +62,7 @@ impl EnvironmentFrame {
         self.push_macro("set!", SchemeMacro::Builtin(BuiltinMacro::Set));
         self.push_macro("or", SchemeMacro::Builtin(BuiltinMacro::Or));
         self.push_macro("and", SchemeMacro::Builtin(BuiltinMacro::And));
+        self.push_macro("quote", SchemeMacro::Builtin(BuiltinMacro::Quote));
     }
 
     fn push_macro(&mut self, name: &str, s_macro: SchemeMacro) {

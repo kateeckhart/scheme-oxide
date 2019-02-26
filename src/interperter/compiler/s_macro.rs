@@ -84,6 +84,7 @@ pub enum BuiltinMacro {
     If,
     Set,
     Begin,
+    Quote,
     //TODO: When syntax-rules is added, change into derived form.
     Let,
     Or,
@@ -206,6 +207,20 @@ impl BuiltinMacro {
                 Ok(vec![CompilerAction::Compile {
                     code: SchemePair::one(ret.build_with_tail(in_args.into()).into()),
                     state,
+                }])
+            }
+            BuiltinMacro::Quote => {
+                let arg = get_args(in_args, 1, 0, false)?.0[0].clone();
+
+                let literal_n = function.compiled_code.literals.len();
+
+                function.compiled_code.literals.push(arg);
+
+                Ok(vec![CompilerAction::EmitAsm {
+                    statements: vec![Statement {
+                        s_type: StatementType::Literal,
+                        arg: literal_n as u32,
+                    }],
                 }])
             }
             BuiltinMacro::Let => {
