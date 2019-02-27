@@ -210,18 +210,22 @@ impl BuiltinMacro {
                 }])
             }
             BuiltinMacro::Quote => {
-                let arg = get_args(in_args, 1, 0, false)?.0[0].clone();
+                let arg = get_args(in_args, 1, 0, false)?.0.pop().unwrap();
 
-                let literal_n = function.compiled_code.literals.len();
+                if let CompilerState::Body = state {
+                    Ok(Vec::new())
+                } else {
+                    let literal_n = function.compiled_code.literals.len();
 
-                function.compiled_code.literals.push(arg);
+                    function.compiled_code.literals.push(arg);
 
-                Ok(vec![CompilerAction::EmitAsm {
-                    statements: vec![Statement {
-                        s_type: StatementType::Literal,
-                        arg: literal_n as u32,
-                    }],
-                }])
+                    Ok(vec![CompilerAction::EmitAsm {
+                        statements: vec![Statement {
+                            s_type: StatementType::Literal,
+                            arg: literal_n as u32,
+                        }],
+                    }])
+                }
             }
             BuiltinMacro::Let => {
                 let (mut arg_list, code) = get_args(in_args, 1, 0, true)?;
