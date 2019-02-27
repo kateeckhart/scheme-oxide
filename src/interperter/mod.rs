@@ -303,16 +303,31 @@ impl DerivedFunctionRef {
     fn call(
         self,
         stack: &mut Vec<StackFrame>,
-        args: Vec<SchemeType>,
+        mut args: Vec<SchemeType>,
     ) -> Result<Option<SchemeType>, RuntimeError> {
-        if self.function.args as usize != args.len() {
+        let argc = self.function.args as usize;
+
+        if self.function.is_vargs {
+            if args.len() < argc {
+                return Err(RuntimeError::ArgError);
+            }
+        } else if args.len() != argc {
             return Err(RuntimeError::ArgError);
         }
 
         let mut env = Vec::new();
-        for arg in args {
+        for arg in args.drain(..argc) {
             env.push(Rc::new(RefCell::new(arg)))
         }
+
+        if self.function.is_vargs {
+            let mut extra_params = ListFactory::new();
+            for extra_param in args {
+                extra_params.push(extra_param)
+            }
+            env.push(Rc::new(RefCell::new(extra_params.build().into())))
+        }
+
         for capture in self.captures {
             env.push(capture)
         }

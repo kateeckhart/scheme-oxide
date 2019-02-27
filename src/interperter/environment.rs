@@ -122,6 +122,7 @@ fn gen_scheme_environment() -> BaseEnvironment {
 
     ret.push_eval("abs", "(lambda (x) (if (negative? x) (- x) x))")
         .unwrap();
+    ret.push_eval("list", "(lambda list list)").unwrap();
 
     ret.push_builtin_function("$gen_unspecified", BuiltinFunction::GenUnspecified);
 

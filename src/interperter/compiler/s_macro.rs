@@ -22,7 +22,7 @@ use super::{
     PartialFunction,
 };
 use crate::interperter::{SchemeFunction, Statement, StatementType};
-use crate::types::pair::ListFactory;
+use crate::types::pair::{ListFactory, PairIterError};
 use crate::types::*;
 use std::mem::replace;
 
@@ -100,19 +100,40 @@ impl BuiltinMacro {
     ) -> Result<Vec<CompilerAction>, CompilerError> {
         match self {
             BuiltinMacro::Lambda => {
-                let (args, code_or_none) = get_args(in_args, 1, 0, true)?;
+                let (mut args, code_or_none) = get_args(in_args, 1, 0, true)?;
 
-                let raw_formals = args[0].to_nullable_pair()?;
                 let mut environment = EnvironmentFrame::new();
 
-                for raw_formal in raw_formals.iter() {
-                    environment.new_object(&raw_formal?.to_symbol()?);
+                let mut is_vargs = false;
+                let mut len = 0;
+                let raw_formals = args.pop().unwrap();
+
+                if let Ok(formal_pair) = raw_formals.to_nullable_pair() {
+                    for raw_formal in formal_pair.iter() {
+                        len += 1;
+                        match raw_formal {
+                            Ok(x) => {
+                                environment.new_object(&x.to_symbol()?);
+                            }
+                            Err(PairIterError::Improper(rest)) => {
+                                is_vargs = true;
+
+                                environment.new_object(&rest.to_symbol()?);
+                                break;
+                            }
+                            Err(err) => return Err(err.into()),
+                        }
+                    }
+                } else if let Ok(formal_list) = raw_formals.to_symbol() {
+                    is_vargs = true;
+
+                    environment.new_object(&formal_list);
                 }
 
                 let parent = replace(
                     function,
                     PartialFunction {
-                        compiled_code: SchemeFunction::new(raw_formals.len()? as u32, false),
+                        compiled_code: SchemeFunction::new(len, is_vargs),
                         environment,
                         parent: None,
                     },
