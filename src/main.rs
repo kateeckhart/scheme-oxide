@@ -30,23 +30,6 @@ mod interperter;
 #[cfg(test)]
 mod tests;
 
-//Transpose pollyfill
-fn transpose_result<T, E>(result: Result<Option<T>, E>) -> Option<Result<T, E>> {
-    match result {
-        Ok(Some(x)) => Some(Ok(x)),
-        Ok(None) => None,
-        Err(e) => Some(Err(e)),
-    }
-}
-
-fn transpose_option<T, E>(option: Option<Result<T, E>>) -> Result<Option<T>, E> {
-    match option {
-        Some(Ok(x)) => Ok(Some(x)),
-        None => Ok(None),
-        Some(Err(e)) => Err(e),
-    }
-}
-
 fn print_usage(name: &str) {
     println!("Usage: {} PROGRAM", name)
 }
@@ -63,7 +46,7 @@ fn main() {
 
     let file_name = if matches.free.len() == 1 {
         matches.free[1].clone()
-    } else if matches.free.len() == 0 {
+    } else if matches.free.is_empty() {
         print_usage(&self_name);
         return;
     } else {

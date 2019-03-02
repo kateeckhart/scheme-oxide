@@ -21,7 +21,6 @@ mod tokenizer;
 use self::tokenizer::{Block, Token, Tokenizer, TokenizerError};
 use crate::types::pair::ListFactory;
 use crate::types::*;
-use crate::{transpose_option, transpose_result};
 
 enum ParserToken {
     PartialList(ListFactory),
@@ -102,14 +101,12 @@ impl<'a> Parser<'a> {
 
     //True if end of file
     fn push_input(&mut self) -> Result<bool, ParserError> {
-        Ok(
-            if let Some(token) = transpose_option(self.tokenizer.next())? {
-                self.stack.push(ParserToken::from_token(token)?);
-                false
-            } else {
-                true
-            },
-        )
+        Ok(if let Some(token) = self.tokenizer.next().transpose()? {
+            self.stack.push(ParserToken::from_token(token)?);
+            false
+        } else {
+            true
+        })
     }
 
     fn iter_once(&mut self) -> Result<Option<SchemeType>, ParserError> {
@@ -153,6 +150,6 @@ impl<'a> Iterator for Parser<'a> {
     type Item = Result<SchemeType, ParserError>;
 
     fn next(&mut self) -> Option<Result<SchemeType, ParserError>> {
-        transpose_result(self.iter_once())
+        self.iter_once().transpose()
     }
 }
