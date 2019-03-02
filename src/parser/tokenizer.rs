@@ -33,6 +33,7 @@ pub enum Token {
     Symbol(String),
     Number(String),
     Bool(bool),
+    Dot,
 }
 
 fn gen_regex() -> Regex {
@@ -62,14 +63,16 @@ fn gen_regex() -> Regex {
 
     let block = r"(?P<block>\(|\))";
 
-    let boolean = "(?P<boolean>#t|#f)";
+    let boolean = format!("(?:(?P<boolean>#t|#f){})", delimer);
+
+    let dot = format!(r"(?:(?P<dot>\.){})", delimer);
 
     //Matches any multi character sequence cut off by end of buffer
-    let clipped = r"(?P<clipped>(?:\.{1,2}|#)$)";
+    let clipped = r"(?P<clipped>(?:\.{2}|#)$)";
 
     let regex_str = format!(
-        "^(?:{}|{}|{}|{}|(?P<whitespace>{}+)|{}|{}|{})",
-        number, symbol, good_string, block, whitespace, bad_eof_string, clipped, boolean
+        "^(?:{}|{}|{}|{}|(?P<whitespace>{}+)|{}|{}|{}|{})",
+        number, symbol, good_string, block, whitespace, bad_eof_string, clipped, boolean, dot
     );
 
     Regex::new(&regex_str).unwrap()
@@ -157,6 +160,7 @@ impl<'a> Tokenizer<'a> {
                     unreachable!()
                 }
             } else if let Some(boolean) = captures.name("boolean") {
+                end_of_token = boolean.end();
                 let bool_str = boolean.as_str();
                 if bool_str == "#t" {
                     Token::Bool(true)
@@ -171,6 +175,9 @@ impl<'a> Tokenizer<'a> {
             } else if let Some(number) = captures.name("number") {
                 end_of_token = number.end();
                 Token::Number(number.as_str().to_string())
+            } else if let Some(dot) = captures.name("dot") {
+                end_of_token = dot.end();
+                Token::Dot
             } else {
                 unreachable!()
             })

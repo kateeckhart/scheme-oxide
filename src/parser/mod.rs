@@ -26,6 +26,7 @@ enum ParserToken {
     PartialList(ListFactory),
     ListEnd,
     Datum(SchemeType),
+    Dot,
 }
 
 impl ParserToken {
@@ -41,6 +42,7 @@ impl ParserToken {
                 ParserToken::Datum(SchemeType::Number(i64::from_str_radix(&num, 10)?))
             }
             Token::Bool(boolean) => ParserToken::Datum(SchemeType::Bool(boolean)),
+            Token::Dot => ParserToken::Dot,
         })
     }
 }
@@ -124,6 +126,17 @@ impl<'a> Parser<'a> {
                         factory.push(datum);
                         self.stack.push(ParserToken::PartialList(factory))
                     }
+                    Some(ParserToken::Dot) => {
+                        self.stack.push(ParserToken::Dot);
+
+                        self.stack.push(ParserToken::Datum(datum));
+
+                        if self.push_input()? {
+                            return Err(ParserError::TokenizerError(
+                                TokenizerError::UnexpectedEndOfFile,
+                            ));
+                        }
+                    }
                     _ => return Err(ParserError::Syntax),
                 },
                 Some(ParserToken::ListEnd) => match self.stack.pop() {
@@ -131,8 +144,42 @@ impl<'a> Parser<'a> {
                         let datum = factory.build();
                         self.stack.push(ParserToken::Datum(datum.into()));
                     }
+                    Some(ParserToken::Datum(rest)) => {
+                        if let Some(ParserToken::Dot) = self.stack.pop() {
+                        } else {
+                            return Err(ParserError::Syntax);
+                        }
+
+                        let factory = if let Some(ParserToken::PartialList(fac)) = self.stack.pop()
+                        {
+                            fac
+                        } else {
+                            return Err(ParserError::Syntax);
+                        };
+
+                        if let Some(list) = factory.build_with_tail(rest).into_option() {
+                            self.stack.push(ParserToken::Datum(list.into()))
+                        } else {
+                            return Err(ParserError::Syntax);
+                        }
+                    }
                     _ => return Err(ParserError::Syntax),
                 },
+                Some(ParserToken::Dot) => {
+                    if let Some(ParserToken::PartialList(list)) = self.stack.pop() {
+                        self.stack.push(ParserToken::PartialList(list))
+                    } else {
+                        return Err(ParserError::Syntax);
+                    }
+
+                    self.stack.push(ParserToken::Dot);
+
+                    if self.push_input()? {
+                        return Err(ParserError::TokenizerError(
+                            TokenizerError::UnexpectedEndOfFile,
+                        ));
+                    }
+                }
                 _ => {
                     self.stack.push(stack_top.unwrap());
                     if self.push_input()? {
