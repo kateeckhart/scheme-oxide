@@ -46,14 +46,6 @@ impl SchemeType {
         }
     }
 
-    pub fn to_symbol(&self) -> Result<String, CastError> {
-        if let SchemeType::Symbol(sym) = self {
-            Ok(sym.to_string())
-        } else {
-            Err(CastError)
-        }
-    }
-
     pub fn to_bool(&self) -> bool {
         match self {
             SchemeType::Bool(false) => false,
@@ -64,14 +56,6 @@ impl SchemeType {
     pub fn to_pair(&self) -> Result<SchemePair, CastError> {
         Ok(match self {
             SchemeType::Pair(ret) => ret.clone(),
-            _ => return Err(CastError),
-        })
-    }
-
-    pub fn to_nullable_pair(&self) -> Result<NullableSchemePair, CastError> {
-        Ok(match self {
-            SchemeType::Pair(ret) => ret.clone().into(),
-            SchemeType::EmptyList => NullableSchemePair::new(),
             _ => return Err(CastError),
         })
     }

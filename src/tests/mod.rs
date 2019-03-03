@@ -18,7 +18,6 @@
 */
 
 use crate::interperter::eval;
-use crate::types::pair::PairIterError;
 use crate::types::*;
 
 #[test]
@@ -61,22 +60,6 @@ fn add_three() {
             }
         }
     }
-}
-
-#[test]
-fn inf_list() {
-    let list = SchemePair::one(SchemeType::EmptyList);
-    list.set_cdr(list.clone().into());
-
-    let mut list_iter = list.iter();
-
-    for _ in 0..5000 {
-        match list_iter.next() {
-            Some(Err(PairIterError::Circular)) => return,
-            _ => (),
-        }
-    }
-    panic!()
 }
 
 #[test]

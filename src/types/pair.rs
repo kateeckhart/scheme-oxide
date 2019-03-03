@@ -84,42 +84,14 @@ impl SchemePair {
     pub fn iter(&self) -> PairIter {
         PairIter::new(self.clone().into())
     }
-
-    pub fn len(&self) -> Result<usize, PairIterError> {
-        let mut count = 0;
-        for object in self.iter() {
-            match object {
-                Ok(_) | Err(PairIterError::Improper(_)) => (),
-                Err(err) => return Err(err),
-            }
-            count += 1;
-        }
-        Ok(count)
-    }
 }
 
 #[derive(Clone)]
 pub struct NullableSchemePair(Option<SchemePair>);
 
 impl NullableSchemePair {
-    pub fn new() -> Self {
-        Self(None)
-    }
-
     pub fn into_option(self) -> Option<SchemePair> {
         self.0
-    }
-
-    pub fn iter(&self) -> PairIter {
-        PairIter::new(self.clone().into())
-    }
-
-    pub fn len(&self) -> Result<usize, PairIterError> {
-        if let Some(pair) = &self.0 {
-            pair.len()
-        } else {
-            Ok(0)
-        }
     }
 }
 
@@ -147,15 +119,6 @@ impl PairIter {
             pair: object.clone(),
             tortoise: SchemeType::EmptyList,
             tortoise_step: false,
-        }
-    }
-
-    pub fn get_rest(&self) -> Result<NullableSchemePair, PairIterError> {
-        let object = self.pair.clone();
-        match object {
-            SchemeType::Pair(pair) => Ok(Some(pair).into()),
-            SchemeType::EmptyList => Ok(None.into()),
-            _ => Err(PairIterError::Improper(object)),
         }
     }
 }

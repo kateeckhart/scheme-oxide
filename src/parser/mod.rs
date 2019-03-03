@@ -19,11 +19,10 @@
 
 mod tokenizer;
 use self::tokenizer::{Block, Token, Tokenizer, TokenizerError};
-use crate::ast::{AstNode, AstSymbol, ListBuilder};
-use crate::types::*;
+use crate::ast::{AstListBuilder, AstNode, AstSymbol};
 
 enum ParserToken {
-    PartialList(ListBuilder),
+    PartialList(AstListBuilder),
     ListEnd,
     Datum(AstNode),
     Dot,
@@ -32,7 +31,7 @@ enum ParserToken {
 impl ParserToken {
     fn from_token(token: Token) -> Result<ParserToken, ParserError> {
         Ok(match token {
-            Token::Block(Block::Start) => ParserToken::PartialList(ListBuilder::new()),
+            Token::Block(Block::Start) => ParserToken::PartialList(AstListBuilder::new()),
             Token::Block(Block::End) => ParserToken::ListEnd,
             Token::TString(string) => {
                 ParserToken::Datum(AstNode::from_string(unescape_string(&string)?))
@@ -111,7 +110,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn iter_once(&mut self) -> Result<Option<SchemeType>, ParserError> {
+    fn iter_once(&mut self) -> Result<Option<AstNode>, ParserError> {
         loop {
             let stack_top = self.stack.pop();
             match stack_top {
@@ -121,7 +120,7 @@ impl<'a> Parser<'a> {
                     }
                 }
                 Some(ParserToken::Datum(datum)) => match self.stack.pop() {
-                    None => return Ok(Some(datum.to_datum())),
+                    None => return Ok(Some(datum)),
                     Some(ParserToken::PartialList(mut factory)) => {
                         factory.push(datum);
                         self.stack.push(ParserToken::PartialList(factory))
@@ -196,9 +195,9 @@ impl<'a> Parser<'a> {
 }
 
 impl<'a> Iterator for Parser<'a> {
-    type Item = Result<SchemeType, ParserError>;
+    type Item = Result<AstNode, ParserError>;
 
-    fn next(&mut self) -> Option<Result<SchemeType, ParserError>> {
+    fn next(&mut self) -> Option<Result<AstNode, ParserError>> {
         self.iter_once().transpose()
     }
 }

@@ -21,23 +21,22 @@ use super::{
     push_tail_body, CompilerAction, CompilerError, CompilerState, CompilerType, EnvironmentFrame,
     PartialFunction,
 };
+use crate::ast::{AstList, AstListBuilder, AstNode, AstSymbol, CoreSymbol, ListTerminator};
 use crate::interperter::{SchemeFunction, Statement, StatementType};
-use crate::types::pair::{ListFactory, PairIterError};
-use crate::types::*;
 use std::mem::replace;
 
 fn get_args(
-    in_args: NullableSchemePair,
+    in_args: AstList,
     required_args: usize,
     optional_args: usize,
     vargs: bool,
-) -> Result<(Vec<SchemeType>, NullableSchemePair), CompilerError> {
+) -> Result<(Vec<AstNode>, AstList), CompilerError> {
     let mut ret = Vec::new();
     let mut arg_iter = in_args.iter();
 
     for _ in 0..required_args {
         if let Some(x) = arg_iter.next() {
-            ret.push(x?)
+            ret.push(x.clone())
         } else {
             return Err(CompilerError::SyntaxError);
         }
@@ -45,15 +44,15 @@ fn get_args(
 
     for _ in 0..optional_args {
         if let Some(x) = arg_iter.next() {
-            ret.push(x?)
+            ret.push(x.clone())
         } else {
             break;
         }
     }
 
-    let rest = arg_iter.get_rest()?;
+    let rest: AstList = arg_iter.collect();
 
-    if !vargs && rest.clone().into_option().is_some() {
+    if !vargs && (!rest.is_empty_list() || in_args.is_improper_list()) {
         return Err(CompilerError::SyntaxError);
     }
 
@@ -68,7 +67,7 @@ pub enum SchemeMacro {
 impl SchemeMacro {
     pub fn expand(
         &self,
-        args: NullableSchemePair,
+        args: AstList,
         function: &mut PartialFunction,
         state: CompilerState,
     ) -> Result<Vec<CompilerAction>, CompilerError> {
@@ -94,46 +93,64 @@ pub enum BuiltinMacro {
 impl BuiltinMacro {
     fn expand(
         &self,
-        in_args: NullableSchemePair,
+        in_args: AstList,
         function: &mut PartialFunction,
         state: CompilerState,
     ) -> Result<Vec<CompilerAction>, CompilerError> {
         match self {
             BuiltinMacro::Lambda => {
-                let (mut args, code_or_none) = get_args(in_args, 1, 0, true)?;
+                let (mut args, code) = get_args(in_args, 1, 0, true)?;
+
+                if code.is_improper_list() {
+                    return Err(CompilerError::SyntaxError);
+                }
 
                 let mut environment = EnvironmentFrame::new();
 
                 let mut is_vargs = false;
-                let mut len = 0;
                 let raw_formals = args.pop().unwrap();
+                let mut formal_len = 0;
 
-                if let Ok(formal_pair) = raw_formals.to_nullable_pair() {
-                    for raw_formal in formal_pair.iter() {
-                        len += 1;
-                        match raw_formal {
-                            Ok(x) => {
-                                environment.new_object(&x.to_symbol()?);
-                            }
-                            Err(PairIterError::Improper(rest)) => {
-                                is_vargs = true;
+                if let Some(formal_list) = raw_formals.to_list() {
+                    for raw_formal in formal_list.iter() {
+                        formal_len += 1;
+                        let formal = if let Some(symbol) = raw_formal.to_symbol() {
+                            symbol
+                        } else {
+                            return Err(CompilerError::SyntaxError);
+                        };
 
-                                environment.new_object(&rest.to_symbol()?);
-                                break;
-                            }
-                            Err(err) => return Err(err.into()),
-                        }
+                        environment.new_object(formal);
                     }
-                } else if let Ok(formal_list) = raw_formals.to_symbol() {
+
+                    if formal_list.is_improper_list() {
+                        let rest_name =
+                            if let ListTerminator::Node(node) = formal_list.get_terminator() {
+                                if let Some(name) = node.to_symbol() {
+                                    name
+                                } else {
+                                    unreachable!();
+                                }
+                            } else {
+                                return Err(CompilerError::SyntaxError);
+                            };
+
+                        is_vargs = true;
+
+                        environment.new_object(rest_name);
+                    }
+                } else if let Some(formal_list) = raw_formals.to_symbol() {
                     is_vargs = true;
 
-                    environment.new_object(&formal_list);
+                    environment.new_object(formal_list);
+                } else {
+                    return Err(CompilerError::SyntaxError);
                 }
 
                 let parent = replace(
                     function,
                     PartialFunction {
-                        compiled_code: SchemeFunction::new(len, is_vargs),
+                        compiled_code: SchemeFunction::new(formal_len, is_vargs),
                         environment,
                         parent: None,
                     },
@@ -143,7 +160,7 @@ impl BuiltinMacro {
 
                 function.parent = Some(Box::new(parent));
 
-                if let Some(code) = code_or_none.into_option() {
+                if !code.is_empty_list() {
                     let mut ret = Vec::new();
                     if let CompilerState::Body = state {
                     } else {
@@ -164,10 +181,10 @@ impl BuiltinMacro {
             BuiltinMacro::If => {
                 let mut args = get_args(in_args, 2, 1, false)?.0;
 
-                let false_expr = if args.len() >= 3 {
+                let false_expr = if args.len() == 3 {
                     args.pop().unwrap()
                 } else {
-                    SchemePair::one(SchemeType::Symbol("$gen_unspecified".to_string())).into()
+                    AstList::one(CoreSymbol::GenUnspecified.into()).into()
                 };
 
                 let true_expr = args.pop().unwrap();
@@ -175,12 +192,12 @@ impl BuiltinMacro {
 
                 Ok(vec![
                     CompilerAction::IfCompileTrue {
-                        true_expr: SchemePair::one(true_expr),
-                        false_expr: SchemePair::one(false_expr),
+                        true_expr: AstList::one(true_expr),
+                        false_expr: AstList::one(false_expr),
                         state,
                     },
                     CompilerAction::Compile {
-                        code: SchemePair::one(test),
+                        code: AstList::one(test),
                         state: CompilerState::Args,
                     },
                 ])
@@ -189,7 +206,11 @@ impl BuiltinMacro {
                 let mut args = get_args(in_args, 2, 0, false)?.0;
 
                 let expr = args.pop().unwrap();
-                let var = args.pop().unwrap().to_symbol()?;
+                let var = if let Some(x) = args.pop().unwrap().to_symbol() {
+                    x
+                } else {
+                    return Err(CompilerError::SyntaxError);
+                };
 
                 let var_id = if let CompilerType::Runtime(x) = function.lookup(&var)? {
                     x
@@ -202,33 +223,35 @@ impl BuiltinMacro {
                 if let CompilerState::Body = state {
                 } else {
                     ret.push(CompilerAction::Compile {
-                        code: SchemePair::one(SchemeType::Symbol("$gen_unspecified".to_string())),
+                        code: AstList::one(CoreSymbol::GenUnspecified.into()),
                         state,
                     });
                 }
 
-                Ok(vec![
-                    CompilerAction::EmitAsm {
-                        statements: vec![Statement {
-                            s_type: StatementType::Set,
-                            arg: var_id,
-                        }],
-                    },
-                    CompilerAction::Compile {
-                        code: SchemePair::one(expr),
-                        state: CompilerState::Args,
-                    },
-                ])
+                ret.push(CompilerAction::EmitAsm {
+                    statements: vec![Statement {
+                        s_type: StatementType::Set,
+                        arg: var_id,
+                    }],
+                });
+
+                ret.push(CompilerAction::Compile {
+                    code: AstList::one(expr),
+                    state: CompilerState::Args,
+                });
+
+                Ok(ret)
             }
             BuiltinMacro::Begin => {
-                let mut ret = ListFactory::new();
-                ret.push(SchemeType::Symbol("let".to_string()));
-                ret.push(SchemeType::EmptyList);
+                if in_args.is_improper_list() {
+                    return Err(CompilerError::SyntaxError);
+                }
 
-                Ok(vec![CompilerAction::Compile {
-                    code: SchemePair::one(ret.build_with_tail(in_args.into()).into()),
-                    state,
-                }])
+                let code = [CoreSymbol::Let.into(), AstList::none().into()]
+                    .iter()
+                    .chain(in_args.iter())
+                    .collect();
+                Ok(vec![CompilerAction::Compile { code, state }])
             }
             BuiltinMacro::Quote => {
                 let arg = get_args(in_args, 1, 0, false)?.0.pop().unwrap();
@@ -238,7 +261,7 @@ impl BuiltinMacro {
                 } else {
                     let literal_n = function.compiled_code.literals.len();
 
-                    function.compiled_code.literals.push(arg);
+                    function.compiled_code.literals.push(arg.to_datum());
 
                     Ok(vec![CompilerAction::EmitAsm {
                         statements: vec![Statement {
@@ -251,71 +274,76 @@ impl BuiltinMacro {
             BuiltinMacro::Let => {
                 let (mut arg_list, code) = get_args(in_args, 1, 0, true)?;
 
-                let definitions = arg_list.pop().unwrap().to_nullable_pair()?;
+                let definitions = if let Some(def) = arg_list.pop().unwrap().to_list() {
+                    def
+                } else {
+                    return Err(CompilerError::SyntaxError);
+                };
 
-                let mut lambda_def = ListFactory::new();
-                lambda_def.push(SchemeType::Symbol("lambda".to_string()));
+                let mut formals = AstListBuilder::new();
+                let mut bindings = AstListBuilder::new();
 
-                let mut formals = Vec::new();
-                let mut bindings = Vec::new();
+                for definition_or_err in definitions.iter() {
+                    let definition = if let Some(def) = definition_or_err.to_list() {
+                        def
+                    } else {
+                        return Err(CompilerError::SyntaxError);
+                    };
 
-                for definition in definitions.iter() {
-                    let mut def_list = get_args(definition?.to_nullable_pair()?, 2, 0, false)?.0;
+                    let mut def_list = get_args(definition, 2, 0, false)?.0;
 
                     bindings.push(def_list.pop().unwrap());
                     formals.push(def_list.pop().unwrap());
                 }
 
-                let mut formal_list = ListFactory::new();
+                let lambda_def: AstList = [CoreSymbol::Lambda.into(), formals.build().into()]
+                    .iter()
+                    .chain(code.iter())
+                    .collect();
 
-                for formal in formals {
-                    formal_list.push(formal)
-                }
-
-                lambda_def.push(formal_list.build().into());
-
-                let mut ret_list = ListFactory::new();
-
-                ret_list.push(lambda_def.build_with_tail(code.into()).into());
-
-                for binding in bindings {
-                    ret_list.push(binding)
-                }
+                let ret_list: AstList = [lambda_def.into()]
+                    .iter()
+                    .chain(bindings.build().iter())
+                    .collect();
 
                 Ok(vec![CompilerAction::Compile {
-                    code: SchemePair::one(ret_list.build().into()),
+                    code: AstList::one(ret_list.into()),
                     state,
                 }])
             }
             BuiltinMacro::And => {
                 let (mut arg_list, rest) = get_args(in_args, 0, 2, true)?;
 
+                if rest.is_improper_list() {
+                    return Err(CompilerError::SyntaxError);
+                }
+
                 let expr = if arg_list.is_empty() {
-                    SchemeType::Bool(true)
+                    AstNode::from_bool(true)
                 } else if arg_list.len() == 1 {
                     arg_list.pop().unwrap()
                 } else {
-                    let mut ret_list = ListFactory::new();
+                    let first_arg = arg_list.remove(0);
 
-                    ret_list.push(SchemeType::Symbol("if".to_string()));
+                    let and_list: AstList = [CoreSymbol::And.into(), arg_list.pop().unwrap()]
+                        .iter()
+                        .chain(rest.iter())
+                        .collect();
 
-                    ret_list.push(arg_list.remove(0));
+                    let ret_list: AstList = [
+                        CoreSymbol::If.into(),
+                        first_arg,
+                        and_list.into(),
+                        AstNode::from_bool(false),
+                    ]
+                    .iter()
+                    .collect();
 
-                    let mut and_list = ListFactory::new();
-
-                    and_list.push(SchemeType::Symbol("and".to_string()));
-
-                    and_list.push(arg_list.pop().unwrap());
-
-                    ret_list.push(and_list.build_with_tail(rest.into()).into());
-
-                    ret_list.push(SchemeType::Bool(false));
-
-                    ret_list.build().into()
+                    ret_list.into()
                 };
 
                 Ok(vec![CompilerAction::Compile {
-                    code: SchemePair::one(expr),
+                    code: AstList::one(expr),
                     state,
                 }])
             }
@@ -323,43 +351,42 @@ impl BuiltinMacro {
                 let (mut arg_list, rest) = get_args(in_args, 0, 2, true)?;
 
                 let expr = if arg_list.is_empty() {
-                    SchemeType::Bool(false)
+                    AstNode::from_bool(false)
                 } else if arg_list.len() == 1 {
                     arg_list.pop().unwrap()
                 } else {
-                    let mut ret_list = ListFactory::new();
+                    let or_expanded_x = AstSymbol::gen_temp();
 
-                    ret_list.push(SchemeType::Symbol("let".to_string()));
+                    let binding_list: AstList = [or_expanded_x.clone().into(), arg_list.remove(0)]
+                        .iter()
+                        .collect();
 
-                    let mut binding_list = ListFactory::new();
+                    let bindings = AstList::one(binding_list.into());
 
-                    binding_list.push(SchemeType::Symbol("$or$expanded$x".to_string()));
-                    binding_list.push(arg_list.remove(0));
+                    let or_list: AstList = [CoreSymbol::Or.into(), arg_list.pop().unwrap()]
+                        .iter()
+                        .chain(rest.iter())
+                        .collect();
 
-                    let bindings = SchemePair::one(binding_list.build().into());
+                    let if_list: AstList = [
+                        CoreSymbol::If.into(),
+                        or_expanded_x.clone().into(),
+                        or_expanded_x.into(),
+                        or_list.into(),
+                    ]
+                    .iter()
+                    .collect();
 
-                    ret_list.push(bindings.into());
+                    let ret_list: AstList =
+                        [CoreSymbol::Let.into(), bindings.into(), if_list.into()]
+                            .iter()
+                            .collect();
 
-                    let mut if_list = ListFactory::new();
-
-                    if_list.push(SchemeType::Symbol("if".to_string()));
-                    if_list.push(SchemeType::Symbol("$or$expanded$x".to_string()));
-                    if_list.push(SchemeType::Symbol("$or$expanded$x".to_string()));
-
-                    let mut or_list = ListFactory::new();
-
-                    or_list.push(SchemeType::Symbol("or".to_string()));
-                    or_list.push(arg_list.pop().unwrap());
-
-                    if_list.push(or_list.build_with_tail(rest.into()).into());
-
-                    ret_list.push(if_list.build().into());
-
-                    ret_list.build().into()
+                    ret_list.into()
                 };
 
                 Ok(vec![CompilerAction::Compile {
-                    code: SchemePair::one(expr),
+                    code: AstList::one(expr),
                     state,
                 }])
             }

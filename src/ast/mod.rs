@@ -20,39 +20,44 @@
 use crate::types::pair::ListFactory;
 use crate::types::*;
 use std::cell::Cell;
+use std::iter::FromIterator;
 use std::thread::{self, ThreadId};
 
 thread_local! {
     static TEMP_COUNT: Cell<usize> = Cell::new(0);
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CoreSymbol {
+    And,
+    Or,
     Let,
     Lambda,
     If,
-    GenerateTmp,
+    GenUnspecified,
 }
 
 impl CoreSymbol {
     pub fn get_name(self) -> &'static str {
         match self {
+            CoreSymbol::And => "and",
+            CoreSymbol::Or => "or",
             CoreSymbol::Let => "let",
             CoreSymbol::Lambda => "lambda",
             CoreSymbol::If => "if",
-            CoreSymbol::GenerateTmp => "$gen_tmp",
+            CoreSymbol::GenUnspecified => "$gen_unspecified",
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum AstSymbolInner {
     Core(CoreSymbol),
     Temp((usize, ThreadId)),
     Defined(String),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AstSymbol(AstSymbolInner);
 
 impl AstSymbol {
@@ -118,12 +123,22 @@ pub struct AstList {
 }
 
 impl AstList {
-    pub fn is_empty_list(&self) -> bool {
-        self.nodes.is_empty() && self.terminator.is_empty_list()
+    pub fn none() -> AstList {
+        AstList {
+            nodes: Vec::new(),
+            terminator: ListTerminator::EmptyList,
+        }
     }
 
-    pub fn is_proper_list(&self) -> bool {
-        self.terminator.is_empty_list()
+    pub fn one(node: AstNode) -> AstList {
+        AstList {
+            nodes: vec![node],
+            terminator: ListTerminator::EmptyList,
+        }
+    }
+
+    pub fn is_empty_list(&self) -> bool {
+        self.nodes.is_empty() && self.terminator.is_empty_list()
     }
 
     pub fn is_improper_list(&self) -> bool {
@@ -137,15 +152,43 @@ impl AstList {
     pub fn iter(&self) -> impl Iterator<Item = &AstNode> + '_ {
         self.nodes.iter()
     }
+
+    pub fn len(&self) -> usize {
+        self.nodes.len()
+    }
 }
 
-pub struct ListBuilder {
+impl FromIterator<AstNode> for AstList {
+    fn from_iter<T>(iter: T) -> AstList
+    where
+        T: IntoIterator<Item = AstNode>,
+    {
+        let mut builder = AstListBuilder::new();
+
+        for node in iter {
+            builder.push(node)
+        }
+
+        builder.build()
+    }
+}
+
+impl<'a> FromIterator<&'a AstNode> for AstList {
+    fn from_iter<T>(iter: T) -> AstList
+    where
+        T: IntoIterator<Item = &'a AstNode>,
+    {
+        iter.into_iter().cloned().collect()
+    }
+}
+
+pub struct AstListBuilder {
     nodes: Vec<AstNode>,
 }
 
-impl ListBuilder {
-    pub fn new() -> ListBuilder {
-        ListBuilder { nodes: Vec::new() }
+impl AstListBuilder {
+    pub fn new() -> AstListBuilder {
+        AstListBuilder { nodes: Vec::new() }
     }
 
     pub fn push(&mut self, node: AstNode) {
@@ -221,25 +264,9 @@ impl AstNode {
         }
     }
 
-    pub fn to_number(&self) -> Option<i64> {
-        if let AstNodeInner::Number(x) = self.0 {
-            Some(x)
-        } else {
-            None
-        }
-    }
-
     pub fn to_symbol(&self) -> Option<AstSymbol> {
         if let AstNodeInner::Symbol(sym) = &self.0 {
             Some(sym.clone())
-        } else {
-            None
-        }
-    }
-
-    pub fn to_string(&self) -> Option<String> {
-        if let AstNodeInner::String(stri) = &self.0 {
-            Some(stri.clone())
         } else {
             None
         }
@@ -252,13 +279,12 @@ impl AstNode {
             None
         }
     }
+}
 
-    pub fn to_bool(&self) -> Option<bool> {
-        if let AstNodeInner::Bool(boolean) = self.0 {
-            Some(boolean)
-        } else {
-            None
-        }
+impl From<CoreSymbol> for AstNode {
+    fn from(sym: CoreSymbol) -> AstNode {
+        let ast_sym: AstSymbol = sym.into();
+        ast_sym.into()
     }
 }
 

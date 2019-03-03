@@ -18,7 +18,7 @@
 */
 
 use super::{SchemeFunction, Statement, StatementType};
-use crate::types::pair::{ListFactory, PairIterError};
+use crate::ast::{AstList, AstListBuilder, AstNode, AstSymbol, CoreSymbol};
 use crate::types::*;
 use std::collections::HashMap;
 use std::mem::replace;
@@ -30,7 +30,7 @@ use self::s_macro::{BuiltinMacro, SchemeMacro};
 
 #[derive(Clone)]
 pub struct EnvironmentFrame {
-    map: HashMap<String, CompilerType>,
+    map: HashMap<AstSymbol, CompilerType>,
     next_id: u32,
 }
 
@@ -46,30 +46,67 @@ impl EnvironmentFrame {
         self.next_id
     }
 
-    pub fn new_object(&mut self, name: &str) -> u32 {
-        self.map
-            .insert(name.into(), CompilerType::Runtime(self.next_id));
+    pub fn new_object(&mut self, name: AstSymbol) -> u32 {
+        self.map.insert(name, CompilerType::Runtime(self.next_id));
         let id = self.next_id;
         self.next_id += 1;
         id
     }
 
     pub fn add_builtin_macros(&mut self) {
-        self.push_macro("lambda", SchemeMacro::Builtin(BuiltinMacro::Lambda));
-        self.push_macro("if", SchemeMacro::Builtin(BuiltinMacro::If));
-        self.push_macro("let", SchemeMacro::Builtin(BuiltinMacro::Let));
-        self.push_macro("begin", SchemeMacro::Builtin(BuiltinMacro::Begin));
-        self.push_macro("set!", SchemeMacro::Builtin(BuiltinMacro::Set));
-        self.push_macro("or", SchemeMacro::Builtin(BuiltinMacro::Or));
-        self.push_macro("and", SchemeMacro::Builtin(BuiltinMacro::And));
-        self.push_macro("quote", SchemeMacro::Builtin(BuiltinMacro::Quote));
+        self.push_macro(
+            AstSymbol::new("lambda"),
+            SchemeMacro::Builtin(BuiltinMacro::Lambda),
+        );
+        self.push_macro(
+            CoreSymbol::Lambda.into(),
+            SchemeMacro::Builtin(BuiltinMacro::Lambda),
+        );
+        self.push_macro(AstSymbol::new("if"), SchemeMacro::Builtin(BuiltinMacro::If));
+        self.push_macro(
+            CoreSymbol::If.into(),
+            SchemeMacro::Builtin(BuiltinMacro::If),
+        );
+        self.push_macro(
+            AstSymbol::new("let"),
+            SchemeMacro::Builtin(BuiltinMacro::Let),
+        );
+        self.push_macro(
+            CoreSymbol::Let.into(),
+            SchemeMacro::Builtin(BuiltinMacro::Let),
+        );
+        self.push_macro(
+            AstSymbol::new("begin"),
+            SchemeMacro::Builtin(BuiltinMacro::Begin),
+        );
+        self.push_macro(
+            AstSymbol::new("set!"),
+            SchemeMacro::Builtin(BuiltinMacro::Set),
+        );
+        self.push_macro(AstSymbol::new("or"), SchemeMacro::Builtin(BuiltinMacro::Or));
+        self.push_macro(
+            CoreSymbol::Or.into(),
+            SchemeMacro::Builtin(BuiltinMacro::Or),
+        );
+        self.push_macro(
+            AstSymbol::new("and"),
+            SchemeMacro::Builtin(BuiltinMacro::And),
+        );
+        self.push_macro(
+            CoreSymbol::And.into(),
+            SchemeMacro::Builtin(BuiltinMacro::And),
+        );
+        self.push_macro(
+            AstSymbol::new("quote"),
+            SchemeMacro::Builtin(BuiltinMacro::Quote),
+        );
     }
 
-    fn push_macro(&mut self, name: &str, s_macro: SchemeMacro) {
-        self.map.insert(name.into(), CompilerType::Macro(s_macro));
+    fn push_macro(&mut self, name: AstSymbol, s_macro: SchemeMacro) {
+        self.map.insert(name, CompilerType::Macro(s_macro));
     }
 
-    fn lookup(&self, name: &str) -> Option<CompilerType> {
+    fn lookup(&self, name: &AstSymbol) -> Option<CompilerType> {
         self.map.get(name).cloned()
     }
 }
@@ -78,7 +115,6 @@ impl EnvironmentFrame {
 pub enum CompilerError {
     IdentifierNotFound,
     SyntaxError,
-    BadList,
 }
 
 impl From<CastError> for CompilerError {
@@ -87,37 +123,35 @@ impl From<CastError> for CompilerError {
     }
 }
 
-impl From<pair::PairIterError> for CompilerError {
-    fn from(_: pair::PairIterError) -> Self {
-        CompilerError::BadList
+fn split_tail(list: AstList) -> Result<(AstList, AstNode), CompilerError> {
+    if list.is_improper_list() {
+        return Err(CompilerError::SyntaxError);
     }
-}
 
-fn split_tail(pair: SchemePair) -> Result<(NullableSchemePair, SchemeType), PairIterError> {
-    let mut factory = ListFactory::new();
-    let mut iter = pair.iter();
+    let mut factory = AstListBuilder::new();
+    let mut iter = list.iter();
 
-    let mut prev = iter.next().unwrap()?;
+    let mut prev = iter.next().unwrap();
 
     for next in iter {
-        factory.push(prev);
-        prev = next?
+        factory.push(prev.clone());
+        prev = next;
     }
 
-    Ok((factory.build(), prev))
+    Ok((factory.build(), prev.clone()))
 }
 
-fn push_tail_body(code: SchemePair, stack: &mut Vec<CompilerAction>) -> Result<(), CompilerError> {
+fn push_tail_body(code: AstList, stack: &mut Vec<CompilerAction>) -> Result<(), CompilerError> {
     let (body, tail) = split_tail(code)?;
 
     stack.push(CompilerAction::Compile {
-        code: SchemePair::one(tail),
+        code: AstList::one(tail),
         state: CompilerState::Tail,
     });
 
-    if let Some(body_exprs) = body.into_option() {
+    if !body.is_empty_list() {
         stack.push(CompilerAction::Compile {
-            code: body_exprs,
+            code: body,
             state: CompilerState::Body,
         })
     }
@@ -137,7 +171,7 @@ pub struct PartialFunction {
 }
 
 impl PartialFunction {
-    fn traverse_macro(&mut self, name: &str) -> Result<Option<SchemeMacro>, CompilerError> {
+    fn traverse_macro(&mut self, name: &AstSymbol) -> Result<Option<SchemeMacro>, CompilerError> {
         let mut function = Some(self);
 
         while let Some(func) = function {
@@ -154,7 +188,7 @@ impl PartialFunction {
         Err(CompilerError::IdentifierNotFound)
     }
 
-    fn lookup(&mut self, name: &str) -> Result<CompilerType, CompilerError> {
+    fn lookup(&mut self, name: &AstSymbol) -> Result<CompilerType, CompilerError> {
         if let Some(ident) = self.environment.lookup(name) {
             //Simple case: Variable has already been declared/looked up
             return Ok(ident);
@@ -162,7 +196,7 @@ impl PartialFunction {
             let macro_or_none = self.traverse_macro(name)?;
 
             if let Some(s_macro) = macro_or_none {
-                self.environment.push_macro(name, s_macro.clone());
+                self.environment.push_macro(name.clone(), s_macro.clone());
                 return Ok(CompilerType::Macro(s_macro));
             } else {
                 let ret = self.environment.len();
@@ -170,7 +204,7 @@ impl PartialFunction {
 
                 loop {
                     let func = function.take().unwrap();
-                    func.environment.new_object(name);
+                    func.environment.new_object(name.clone());
 
                     if let Some(parent) = func.parent.as_mut() {
                         if let Some(compiler_type) = parent.environment.lookup(name) {
@@ -203,7 +237,7 @@ pub enum CompilerState {
 #[derive(Debug)]
 pub enum CompilerAction {
     Compile {
-        code: SchemePair,
+        code: AstList,
         state: CompilerState,
     },
     FunctionDone,
@@ -211,13 +245,13 @@ pub enum CompilerAction {
         statements: Vec<Statement>,
     },
     IfCompileTrue {
-        true_expr: SchemePair,
-        false_expr: SchemePair,
+        true_expr: AstList,
+        false_expr: AstList,
         state: CompilerState,
     },
     IfCompileFalse {
         test_asm: Vec<Statement>,
-        false_expr: SchemePair,
+        false_expr: AstList,
         state: CompilerState,
     },
     IfCompileDone {
@@ -228,7 +262,7 @@ pub enum CompilerAction {
 
 pub fn compile_function(
     base_environment: &EnvironmentFrame,
-    code: SchemePair,
+    code: AstList,
 ) -> Result<SchemeFunction, CompilerError> {
     let mut stack = vec![CompilerAction::FunctionDone];
 
@@ -245,102 +279,108 @@ pub fn compile_function(
     'stack_loop: while let Some(action) = stack.pop() {
         match action {
             CompilerAction::Compile { code, state } => {
+                if code.is_improper_list() {
+                    return Err(CompilerError::SyntaxError);
+                }
                 let mut expr_iter = code.iter();
-                while let Some(expr_or_err) = expr_iter.next() {
-                    let expr = expr_or_err?;
-                    match expr {
-                        //Function call/Macro use
-                        SchemeType::Pair(pair) => {
-                            //Backup the rest of the expressions in this block
-                            if let Some(rest) = expr_iter.get_rest()?.into_option() {
-                                stack.push(CompilerAction::Compile { code: rest, state })
+                while let Some(expr) = expr_iter.next() {
+                    //Function call/Macro use
+                    if let Some(list) = expr.to_list() {
+                        let rest: AstList = expr_iter.collect();
+
+                        //Backup the rest of the expressions in this block
+                        if !rest.is_empty_list() {
+                            stack.push(CompilerAction::Compile { code: rest, state })
+                        }
+
+                        if list.is_improper_list() {
+                            return Err(CompilerError::SyntaxError);
+                        }
+
+                        let mut list_iter = list.iter();
+
+                        let function_object = if let Some(node) = list_iter.next() {
+                            node
+                        } else {
+                            return Err(CompilerError::SyntaxError);
+                        };
+
+                        let argv: AstList = list_iter.collect();
+
+                        //If the name is a macro, expand the macro
+                        if let Some(function_name) = function_object.to_symbol() {
+                            let calling_function = function.lookup(&function_name)?;
+                            if let CompilerType::Macro(s_macro) = calling_function {
+                                let code = current_code_block;
+                                current_code_block = Vec::new();
+
+                                stack.push(CompilerAction::EmitAsm { statements: code });
+                                stack.append(&mut s_macro.expand(argv, &mut function, state)?);
+                                continue 'stack_loop;
                             }
+                        }
 
-                            let function_object = pair.get_car();
-                            let argv = pair.get_cdr().to_nullable_pair()?;
-                            //If the name is a macro, expand the macro
-                            if let SchemeType::Symbol(function_name) = function_object {
-                                let calling_function = function.lookup(&function_name)?;
-                                if let CompilerType::Macro(s_macro) = calling_function {
-                                    let code = current_code_block;
-                                    current_code_block = Vec::new();
+                        let argc = argv.len();
 
-                                    stack.push(CompilerAction::EmitAsm { statements: code });
-                                    stack.append(&mut s_macro.expand(
-                                        argv,
-                                        &mut function,
-                                        state,
-                                    )?);
-                                    continue 'stack_loop;
-                                }
-                            }
+                        let s_type = if let CompilerState::Tail = state {
+                            StatementType::Tail
+                        } else {
+                            StatementType::Call
+                        };
 
-                            let argc = argv.len()?;
+                        //Compile the call to the function
+                        let mut statements = vec![Statement {
+                            s_type,
+                            arg: argc as u32,
+                        }];
 
-                            let s_type = if let CompilerState::Tail = state {
-                                StatementType::Tail
-                            } else {
-                                StatementType::Call
-                            };
+                        if let CompilerState::Body = state {
+                            statements.push(Statement {
+                                s_type: StatementType::Discard,
+                                arg: 0,
+                            })
+                        };
 
-                            //Compile the call to the function
-                            let mut statements = vec![Statement {
-                                s_type,
-                                arg: argc as u32,
-                            }];
+                        stack.push(CompilerAction::EmitAsm { statements });
 
-                            if let CompilerState::Body = state {
-                                statements.push(Statement {
-                                    s_type: StatementType::Discard,
-                                    arg: 0,
-                                })
-                            };
+                        let function_name = AstList::one(function_object.clone());
 
-                            stack.push(CompilerAction::EmitAsm { statements });
-
-                            let function_name = SchemePair::one(pair.get_car());
-
-                            //Compile the arguments to the function
-                            if let Some(arguments) = argv.into_option() {
-                                stack.push(CompilerAction::Compile {
-                                    code: arguments,
-                                    state: CompilerState::Args,
-                                });
-                            }
-
-                            //Compile expression that evaluates to the function
+                        //Compile the arguments to the function
+                        if !argv.is_empty_list() {
                             stack.push(CompilerAction::Compile {
-                                code: function_name,
+                                code: argv,
                                 state: CompilerState::Args,
                             });
-
-                            continue 'stack_loop;
                         }
-                        SchemeType::Symbol(ident_name) => {
-                            let ident_or_macro = function.lookup(&ident_name)?;
 
-                            if let CompilerType::Runtime(ident) = ident_or_macro {
-                                if let CompilerState::Body = state {
-                                } else {
-                                    current_code_block.push(Statement {
-                                        s_type: StatementType::Get,
-                                        arg: ident,
-                                    })
-                                }
-                            } else {
-                                return Err(CompilerError::SyntaxError);
-                            }
-                        }
-                        _ => {
+                        //Compile expression that evaluates to the function
+                        stack.push(CompilerAction::Compile {
+                            code: function_name,
+                            state: CompilerState::Args,
+                        });
+
+                        continue 'stack_loop;
+                    } else if let Some(ident_name) = expr.to_symbol() {
+                        let ident_or_macro = function.lookup(&ident_name)?;
+
+                        if let CompilerType::Runtime(ident) = ident_or_macro {
                             if let CompilerState::Body = state {
                             } else {
                                 current_code_block.push(Statement {
-                                    s_type: StatementType::Literal,
-                                    arg: function.compiled_code.literals.len() as u32,
-                                });
-                                function.compiled_code.literals.push(expr);
+                                    s_type: StatementType::Get,
+                                    arg: ident,
+                                })
                             }
+                        } else {
+                            return Err(CompilerError::SyntaxError);
                         }
+                    } else if let CompilerState::Body = state {
+                    } else {
+                        current_code_block.push(Statement {
+                            s_type: StatementType::Literal,
+                            arg: function.compiled_code.literals.len() as u32,
+                        });
+                        function.compiled_code.literals.push(expr.to_datum());
                     }
                 }
             }
