@@ -19,29 +19,29 @@
 
 mod tokenizer;
 use self::tokenizer::{Block, Token, Tokenizer, TokenizerError};
-use crate::types::pair::ListFactory;
+use crate::ast::{AstNode, AstSymbol, ListBuilder};
 use crate::types::*;
 
 enum ParserToken {
-    PartialList(ListFactory),
+    PartialList(ListBuilder),
     ListEnd,
-    Datum(SchemeType),
+    Datum(AstNode),
     Dot,
 }
 
 impl ParserToken {
     fn from_token(token: Token) -> Result<ParserToken, ParserError> {
         Ok(match token {
-            Token::Block(Block::Start) => ParserToken::PartialList(ListFactory::new()),
+            Token::Block(Block::Start) => ParserToken::PartialList(ListBuilder::new()),
             Token::Block(Block::End) => ParserToken::ListEnd,
             Token::TString(string) => {
-                ParserToken::Datum(SchemeType::String(unescape_string(&string)?))
+                ParserToken::Datum(AstNode::from_string(unescape_string(&string)?))
             }
-            Token::Symbol(symbol) => ParserToken::Datum(SchemeType::Symbol(symbol)),
+            Token::Symbol(symbol) => ParserToken::Datum(AstSymbol::new(&symbol).into()),
             Token::Number(num) => {
-                ParserToken::Datum(SchemeType::Number(i64::from_str_radix(&num, 10)?))
+                ParserToken::Datum(AstNode::from_number(i64::from_str_radix(&num, 10)?))
             }
-            Token::Bool(boolean) => ParserToken::Datum(SchemeType::Bool(boolean)),
+            Token::Bool(boolean) => ParserToken::Datum(AstNode::from_bool(boolean)),
             Token::Dot => ParserToken::Dot,
         })
     }
@@ -121,7 +121,7 @@ impl<'a> Parser<'a> {
                     }
                 }
                 Some(ParserToken::Datum(datum)) => match self.stack.pop() {
-                    None => return Ok(Some(datum)),
+                    None => return Ok(Some(datum.to_datum())),
                     Some(ParserToken::PartialList(mut factory)) => {
                         factory.push(datum);
                         self.stack.push(ParserToken::PartialList(factory))
@@ -157,10 +157,12 @@ impl<'a> Parser<'a> {
                             return Err(ParserError::Syntax);
                         };
 
-                        if let Some(list) = factory.build_with_tail(rest).into_option() {
-                            self.stack.push(ParserToken::Datum(list.into()))
-                        } else {
+                        let list = factory.build_with_tail(rest);
+
+                        if list.is_empty_list() {
                             return Err(ParserError::Syntax);
+                        } else {
+                            self.stack.push(ParserToken::Datum(list.into()))
                         }
                     }
                     _ => return Err(ParserError::Syntax),

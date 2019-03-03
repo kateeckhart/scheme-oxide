@@ -22,6 +22,8 @@ use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 
+mod ast;
+
 mod parser;
 mod types;
 
