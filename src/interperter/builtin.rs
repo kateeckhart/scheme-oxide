@@ -38,7 +38,7 @@ pub enum BuiltinFunction {
 }
 
 impl BuiltinFunction {
-    pub fn call(
+    pub fn call_with_stack(
         self,
         stack: &mut Vec<StackFrame>,
         mut args: Vec<SchemeType>,
@@ -113,7 +113,7 @@ impl BuiltinFunction {
 
                 args[0].to_pair()?.set_car(args[1].clone());
 
-                BuiltinFunction::GenUnspecified.call(stack, Vec::new())
+                BuiltinFunction::GenUnspecified.call_with_stack(stack, Vec::new())
             }
             BuiltinFunction::SetCdr => {
                 if args.len() != 2 {
@@ -122,7 +122,7 @@ impl BuiltinFunction {
 
                 args[1].to_pair()?.set_cdr(args[1].clone());
 
-                BuiltinFunction::GenUnspecified.call(stack, Vec::new())
+                BuiltinFunction::GenUnspecified.call_with_stack(stack, Vec::new())
             }
             BuiltinFunction::Eqv => {
                 if args.len() != 2 {

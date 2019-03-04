@@ -59,6 +59,13 @@ impl SchemeType {
             _ => return Err(CastError),
         })
     }
+
+    pub fn to_function(&self) -> Result<FunctionRef, CastError> {
+        Ok(match self {
+            SchemeType::Function(func) => func.clone(),
+            _ => return Err(CastError),
+        })
+    }
 }
 
 impl Display for SchemeType {

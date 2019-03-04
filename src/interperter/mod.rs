@@ -99,29 +99,7 @@ impl SchemeFunction {
     }
 }
 
-fn exec_function(
-    object: SchemeType,
-    stack: &mut Vec<StackFrame>,
-    args: Vec<SchemeType>,
-) -> Result<Option<SchemeType>, RuntimeError> {
-    let function;
-    if let SchemeType::Function(func) = object {
-        function = func.0;
-    } else {
-        return Err(RuntimeError::TypeError);
-    }
-
-    function.call(stack, args)
-}
-
-fn exec_top_function(
-    top: Rc<SchemeFunction>,
-    env: Vec<Rc<RefCell<SchemeType>>>,
-) -> Result<SchemeType, RuntimeError> {
-    if top.args != 0 || top.is_vargs {
-        panic!("Not a top level function.");
-    }
-    let mut stack = vec![StackFrame::new(env, top)];
+fn run_vm(mut stack: Vec<StackFrame>) -> Result<SchemeType, RuntimeError> {
     let mut ret_expr = None;
     'exec_loop: while let Some(s_frame) = stack.pop() {
         let mut frame = s_frame.top;
@@ -158,7 +136,10 @@ fn exec_top_function(
                         });
                     }
 
-                    ret_expr = exec_function(new_function, &mut stack, args)?;
+                    ret_expr = new_function
+                        .to_function()?
+                        .0
+                        .call_with_stack(&mut stack, args)?;
                     continue 'exec_loop;
                 }
                 StatementType::Discard => {
@@ -211,14 +192,18 @@ fn eval_with_environment(string: &str, env: &BaseEnvironment) -> Result<SchemeTy
         return eval("($gen_unspecified)");
     }
 
-    let function = compiler::compile_function(&env.frame, object);
+    let function = compiler::compile_function(&env.frame, object)?;
     let env_vars = env
         .bounded
         .iter()
         .map(|x| Rc::new(RefCell::new(x.clone())))
         .collect::<Vec<_>>();
 
-    exec_top_function(Rc::new(function?), env_vars)
+    FunctionRef(FunctionRefInner::Derived(DerivedFunctionRef {
+        function: Rc::new(function),
+        captures: env_vars,
+    }))
+    .call(Vec::new())
 }
 
 pub fn eval(string: &str) -> Result<SchemeType, RuntimeError> {
@@ -255,6 +240,20 @@ impl From<CastError> for RuntimeError {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionRef(FunctionRefInner);
 
+impl FunctionRef {
+    pub fn call(self, args: Vec<SchemeType>) -> Result<SchemeType, RuntimeError> {
+        let mut stack = Vec::new();
+
+        let ret = self.0.call_with_stack(&mut stack, args)?;
+
+        if let Some(value) = ret {
+            Ok(value)
+        } else {
+            run_vm(stack)
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 enum FunctionRefInner {
     Derived(DerivedFunctionRef),
@@ -262,14 +261,14 @@ enum FunctionRefInner {
 }
 
 impl FunctionRefInner {
-    fn call(
+    fn call_with_stack(
         self,
         stack: &mut Vec<StackFrame>,
         args: Vec<SchemeType>,
     ) -> Result<Option<SchemeType>, RuntimeError> {
         match self {
-            FunctionRefInner::Builtin(func) => func.call(stack, args),
-            FunctionRefInner::Derived(func) => func.call(stack, args),
+            FunctionRefInner::Builtin(func) => func.call_with_stack(stack, args),
+            FunctionRefInner::Derived(func) => func.call_with_stack(stack, args),
         }
     }
 }
@@ -299,7 +298,7 @@ impl PartialEq for DerivedFunctionRef {
 }
 
 impl DerivedFunctionRef {
-    fn call(
+    fn call_with_stack(
         self,
         stack: &mut Vec<StackFrame>,
         mut args: Vec<SchemeType>,
