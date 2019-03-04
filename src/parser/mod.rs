@@ -18,14 +18,15 @@
 */
 
 mod tokenizer;
-use self::tokenizer::{Block, Token, Tokenizer, TokenizerError};
-use crate::ast::{AstListBuilder, AstNode, AstSymbol};
+use self::tokenizer::{Block, Mark, Token, Tokenizer, TokenizerError};
+use crate::ast::{AstList, AstListBuilder, AstNode, AstSymbol};
 
 enum ParserToken {
     PartialList(AstListBuilder),
     ListEnd,
     Datum(AstNode),
     Dot,
+    Mark(Mark),
 }
 
 impl ParserToken {
@@ -42,6 +43,7 @@ impl ParserToken {
             }
             Token::Bool(boolean) => ParserToken::Datum(AstNode::from_bool(boolean)),
             Token::Dot => ParserToken::Dot,
+            Token::Mark(mark) => ParserToken::Mark(mark),
         })
     }
 }
@@ -135,6 +137,15 @@ impl<'a> Parser<'a> {
                                 TokenizerError::UnexpectedEndOfFile,
                             ));
                         }
+                    }
+                    Some(ParserToken::Mark(mark)) => {
+                        let name = AstSymbol::new(match mark {
+                            Mark::Quote => "quote",
+                        });
+
+                        let ret_list: AstList = [name.into(), datum].iter().collect();
+
+                        self.stack.push(ParserToken::Datum(ret_list.into()));
                     }
                     _ => return Err(ParserError::Syntax),
                 },

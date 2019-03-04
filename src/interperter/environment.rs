@@ -120,7 +120,7 @@ fn gen_scheme_environment() -> BaseEnvironment {
         "(lambda (x) (or (eqv? x #t) (eqv? x #f)))",
     )
     .unwrap();
-    ret.push_eval(AstSymbol::new("null?"), "(lambda (x) (eqv? x (quote ())))")
+    ret.push_eval(AstSymbol::new("null?"), "(lambda (x) (eqv? x '()))")
         .unwrap();
 
     ret.push_eval(AstSymbol::new("zero?"), "(lambda (x) (= x 0))")

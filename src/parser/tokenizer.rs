@@ -27,6 +27,11 @@ pub enum Block {
 }
 
 #[derive(Debug, Eq, PartialEq)]
+pub enum Mark {
+    Quote,
+}
+
+#[derive(Debug, Eq, PartialEq)]
 pub enum Token {
     Block(Block),
     TString(String),
@@ -34,6 +39,7 @@ pub enum Token {
     Number(String),
     Bool(bool),
     Dot,
+    Mark(Mark),
 }
 
 fn gen_regex() -> Regex {
@@ -67,12 +73,14 @@ fn gen_regex() -> Regex {
 
     let dot = format!(r"(?:(?P<dot>\.){})", delimer);
 
+    let mark = "(?P<mark>')";
+
     //Matches any multi character sequence cut off by end of buffer
     let clipped = r"(?P<clipped>(?:\.{2}|#)$)";
 
     let regex_str = format!(
-        "^(?:{}|{}|{}|{}|(?P<whitespace>{}+)|{}|{}|{}|{})",
-        number, symbol, good_string, block, whitespace, bad_eof_string, clipped, boolean, dot
+        "^(?:{}|{}|{}|{}|(?P<whitespace>{}+)|{}|{}|{}|{}|{})",
+        number, symbol, good_string, block, whitespace, bad_eof_string, clipped, boolean, dot, mark
     );
 
     Regex::new(&regex_str).unwrap()
@@ -178,6 +186,12 @@ impl<'a> Tokenizer<'a> {
             } else if let Some(dot) = captures.name("dot") {
                 end_of_token = dot.end();
                 Token::Dot
+            } else if let Some(mark) = captures.name("mark") {
+                if mark.as_str() == "'" {
+                    Token::Mark(Mark::Quote)
+                } else {
+                    unreachable!()
+                }
             } else {
                 unreachable!()
             })
