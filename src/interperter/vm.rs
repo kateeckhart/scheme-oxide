@@ -41,13 +41,8 @@ pub enum StatementType {
     BranchIfFalse,
 }
 
-struct StackTop {
-    arg_stack: Vec<SchemeType>,
-    vars: Vec<Rc<RefCell<SchemeType>>>,
-}
-
 pub struct StackFrame {
-    top: StackTop,
+    vars: Vec<Rc<RefCell<SchemeType>>>,
     statement_num: usize,
     function: Rc<SchemeFunction>,
 }
@@ -55,10 +50,7 @@ pub struct StackFrame {
 impl StackFrame {
     pub fn new(vars: Vec<Rc<RefCell<SchemeType>>>, function: Rc<SchemeFunction>) -> Self {
         Self {
-            top: StackTop {
-                arg_stack: Vec::new(),
-                vars,
-            },
+            vars,
             statement_num: 0,
             function,
         }
@@ -121,50 +113,46 @@ impl SchemeFunction {
 }
 
 pub fn run_vm(mut stack: Vec<StackFrame>) -> Result<SchemeType, RuntimeError> {
-    let mut ret_expr = None;
+    let mut arg_stack = Vec::new();
     'exec_loop: while let Some(s_frame) = stack.pop() {
-        let mut frame = s_frame.top;
+        let vars = s_frame.vars;
         let function = s_frame.function;
         let mut code_iter = function.code[s_frame.statement_num..].iter();
-        if ret_expr.is_some() {
-            frame.arg_stack.push(ret_expr.take().unwrap())
-        }
         while let Some(statement) = code_iter.next() {
             let arg = statement.arg;
             match statement.s_type {
-                StatementType::Get => frame
-                    .arg_stack
-                    .push(frame.vars[arg as usize].borrow().clone()),
+                StatementType::Get => arg_stack.push(vars[arg as usize].borrow().clone()),
                 StatementType::Set => {
-                    frame.vars[arg as usize].replace(frame.arg_stack.pop().unwrap());
+                    vars[arg as usize].replace(arg_stack.pop().unwrap());
                 }
-                StatementType::Literal => frame
-                    .arg_stack
-                    .push(function.literals[arg as usize].clone()),
+                StatementType::Literal => arg_stack.push(function.literals[arg as usize].clone()),
                 StatementType::Call | StatementType::Tail => {
                     let statement_num = function.code.len() - code_iter.as_slice().len();
-                    let mut drain = frame
-                        .arg_stack
-                        .drain(frame.arg_stack.len() - (arg as usize) - 1..);
+                    let mut drain = arg_stack.drain(arg_stack.len() - (arg as usize) - 1..);
                     let new_function = drain.next().unwrap();
                     let args = drain.collect::<Vec<_>>();
 
                     if let StatementType::Call = statement.s_type {
                         stack.push(StackFrame {
-                            top: frame,
+                            vars,
                             statement_num,
                             function: function.clone(),
                         });
                     }
 
-                    ret_expr = new_function
+                    let ret_expr = new_function
                         .to_function()?
                         .0
                         .call_with_stack(&mut stack, args)?;
+
+                    if let Some(ret) = ret_expr {
+                        arg_stack.push(ret)
+                    }
+
                     continue 'exec_loop;
                 }
                 StatementType::Discard => {
-                    frame.arg_stack.pop();
+                    arg_stack.pop();
                 }
                 StatementType::Lamada => {
                     let child_function = function.lambdas[arg as usize].clone();
@@ -172,10 +160,10 @@ pub fn run_vm(mut stack: Vec<StackFrame>) -> Result<SchemeType, RuntimeError> {
                     let mut captures = Vec::new();
 
                     for capture in child_function.captures.iter() {
-                        captures.push(frame.vars[*capture as usize].clone())
+                        captures.push(vars[*capture as usize].clone())
                     }
 
-                    frame.arg_stack.push(SchemeType::Function(FunctionRef(
+                    arg_stack.push(SchemeType::Function(FunctionRef(
                         FunctionRefInner::Derived(DerivedFunctionRef {
                             function: child_function,
                             captures,
@@ -186,7 +174,7 @@ pub fn run_vm(mut stack: Vec<StackFrame>) -> Result<SchemeType, RuntimeError> {
                     let branch = if let StatementType::Branch = statement.s_type {
                         true
                     } else {
-                        !frame.arg_stack.pop().unwrap().to_bool()
+                        !arg_stack.pop().unwrap().to_bool()
                     };
 
                     if branch {
@@ -196,7 +184,6 @@ pub fn run_vm(mut stack: Vec<StackFrame>) -> Result<SchemeType, RuntimeError> {
                 }
             }
         }
-        ret_expr = Some(frame.arg_stack.pop().unwrap())
     }
-    Ok(ret_expr.unwrap())
+    Ok(arg_stack.pop().unwrap())
 }
