@@ -17,13 +17,11 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use super::{SchemeFunction, Statement, StatementType};
 use crate::ast::{AstList, AstListBuilder, AstNode, AstSymbol, CoreSymbol};
+use crate::interperter::vm::{SchemeFunction, Statement, StatementType};
 use crate::types::*;
 use std::collections::HashMap;
-use std::mem::replace;
 use std::ops::DerefMut;
-use std::rc::Rc;
 
 mod s_macro;
 use self::s_macro::{BuiltinMacro, SchemeMacro};
@@ -209,13 +207,13 @@ impl PartialFunction {
                     if let Some(parent) = func.parent.as_mut() {
                         if let Some(compiler_type) = parent.environment.lookup(name) {
                             if let CompilerType::Runtime(ident) = compiler_type {
-                                func.compiled_code.captures.push(ident);
+                                func.compiled_code.new_capture(ident);
                                 return Ok(CompilerType::Runtime(ret));
                             } else {
                                 unreachable!()
                             }
                         } else {
-                            func.compiled_code.captures.push(parent.environment.len());
+                            func.compiled_code.new_capture(parent.environment.len());
                             function = Some(parent);
                         }
                     } else {
@@ -378,9 +376,9 @@ pub fn compile_function(
                     } else {
                         current_code_block.push(Statement {
                             s_type: StatementType::Literal,
-                            arg: function.compiled_code.literals.len() as u32,
+                            arg: function.compiled_code.literal_len() as u32,
                         });
-                        function.compiled_code.literals.push(expr.to_datum());
+                        function.compiled_code.new_literal(expr.to_datum());
                     }
                 }
             }
@@ -388,11 +386,11 @@ pub fn compile_function(
                 current_code_block.append(&mut statements);
             }
             CompilerAction::FunctionDone => {
-                replace(&mut function.compiled_code.code, current_code_block);
+                function.compiled_code.append_code(current_code_block);
                 current_code_block = Vec::new();
                 if let Some(mut parent) = function.parent {
                     let child_code = function.compiled_code;
-                    parent.compiled_code.lamadas.push(Rc::new(child_code));
+                    parent.compiled_code.new_lambda(child_code);
                     function = *parent;
                 } else {
                     break 'stack_loop;

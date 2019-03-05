@@ -22,7 +22,7 @@ use super::{
     PartialFunction,
 };
 use crate::ast::{AstList, AstListBuilder, AstNode, AstSymbol, CoreSymbol, ListTerminator};
-use crate::interperter::{SchemeFunction, Statement, StatementType};
+use crate::interperter::vm::{SchemeFunction, Statement, StatementType};
 use std::mem::replace;
 
 fn get_args(
@@ -156,7 +156,7 @@ impl BuiltinMacro {
                     },
                 );
 
-                let lamada_n = parent.compiled_code.lamadas.len();
+                let lamada_n = parent.compiled_code.lambda_len();
 
                 function.parent = Some(Box::new(parent));
 
@@ -259,9 +259,9 @@ impl BuiltinMacro {
                 if let CompilerState::Body = state {
                     Ok(Vec::new())
                 } else {
-                    let literal_n = function.compiled_code.literals.len();
+                    let literal_n = function.compiled_code.literal_len();
 
-                    function.compiled_code.literals.push(arg.to_datum());
+                    function.compiled_code.new_literal(arg.to_datum());
 
                     Ok(vec![CompilerAction::EmitAsm {
                         statements: vec![Statement {

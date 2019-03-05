@@ -17,7 +17,8 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use super::{RuntimeError, StackFrame};
+use super::RuntimeError;
+use crate::interperter::vm::StackFrame;
 use crate::types::*;
 use std::cmp::Ordering;
 
