@@ -17,7 +17,6 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use crate::ast::AstListBuilder;
 use crate::parser::{Parser, ParserError};
 use crate::types::pair::ListFactory;
 use crate::types::*;
@@ -38,17 +37,16 @@ use vm::{run_vm, SchemeFunction, StackFrame};
 
 fn eval_with_environment(string: &str, env: &BaseEnvironment) -> Result<SchemeType, RuntimeError> {
     let parser = Parser::new(string);
-    let mut object_builder = AstListBuilder::new();
+    let mut nodes = Vec::new();
     for object in parser {
-        object_builder.push(object?)
+        nodes.push(object?)
     }
-    let object = object_builder.build();
 
-    if object.is_empty_list() {
+    if nodes.is_empty() {
         return eval("($gen_unspecified)");
     }
 
-    let function = compiler::compile_function(&env.frame, object)?;
+    let function = compiler::compile_function(&env.frame, nodes)?;
     let env_vars = env
         .bounded
         .iter()

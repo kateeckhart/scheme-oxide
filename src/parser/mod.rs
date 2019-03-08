@@ -19,7 +19,7 @@
 
 mod tokenizer;
 use self::tokenizer::{Block, Mark, Token, Tokenizer, TokenizerError};
-use crate::ast::{AstList, AstListBuilder, AstNode, AstSymbol};
+use crate::ast::{AstListBuilder, AstNode, AstSymbol};
 
 enum ParserToken {
     PartialList(AstListBuilder),
@@ -143,7 +143,7 @@ impl<'a> Parser<'a> {
                             Mark::Quote => "quote",
                         });
 
-                        let ret_list: AstList = [name.into(), datum].iter().collect();
+                        let ret_list = vec![name.into(), datum];
 
                         self.stack.push(ParserToken::Datum(ret_list.into()));
                     }
@@ -167,12 +167,12 @@ impl<'a> Parser<'a> {
                             return Err(ParserError::Syntax);
                         };
 
-                        let list = factory.build_with_tail(rest);
+                        let list_or_err = factory.build_with_tail(rest);
 
-                        if list.is_empty_list() {
-                            return Err(ParserError::Syntax);
-                        } else {
+                        if let Some(list) = list_or_err {
                             self.stack.push(ParserToken::Datum(list.into()))
+                        } else {
+                            return Err(ParserError::Syntax);
                         }
                     }
                     _ => return Err(ParserError::Syntax),

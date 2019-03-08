@@ -17,7 +17,7 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use crate::ast::{AstList, AstListBuilder, AstNode, AstSymbol, CoreSymbol};
+use crate::ast::{AstNode, AstSymbol, CoreSymbol};
 use crate::interperter::vm::{SchemeFunction, Statement, StatementType};
 use crate::types::*;
 use std::collections::HashMap;
@@ -121,35 +121,28 @@ impl From<CastError> for CompilerError {
     }
 }
 
-fn split_tail(list: AstList) -> Result<(AstList, AstNode), CompilerError> {
-    if list.is_improper_list() {
+fn push_tail_body(
+    mut code: Vec<AstNode>,
+    stack: &mut Vec<CompilerAction>,
+) -> Result<(), CompilerError> {
+    if code.is_empty() {
         return Err(CompilerError::SyntaxError);
     }
 
-    let mut factory = AstListBuilder::new();
-    let mut iter = list.iter();
+    let body: Vec<AstNode> = code.drain(..code.len() - 1).collect();
 
-    let mut prev = iter.next().unwrap();
-
-    for next in iter {
-        factory.push(prev.clone());
-        prev = next;
-    }
-
-    Ok((factory.build(), prev.clone()))
-}
-
-fn push_tail_body(code: AstList, stack: &mut Vec<CompilerAction>) -> Result<(), CompilerError> {
-    let (body, tail) = split_tail(code)?;
+    let tail = code.pop().unwrap();
 
     stack.push(CompilerAction::Compile {
-        code: AstList::one(tail),
+        code: vec![tail],
+        code_n: 0,
         state: CompilerState::Tail,
     });
 
-    if !body.is_empty_list() {
+    if !body.is_empty() {
         stack.push(CompilerAction::Compile {
             code: body,
+            code_n: 0,
             state: CompilerState::Body,
         })
     }
@@ -235,7 +228,8 @@ pub enum CompilerState {
 #[derive(Debug)]
 pub enum CompilerAction {
     Compile {
-        code: AstList,
+        code: Vec<AstNode>,
+        code_n: usize,
         state: CompilerState,
     },
     FunctionDone,
@@ -243,13 +237,13 @@ pub enum CompilerAction {
         statements: Vec<Statement>,
     },
     IfCompileTrue {
-        true_expr: AstList,
-        false_expr: AstList,
+        true_expr: Vec<AstNode>,
+        false_expr: Vec<AstNode>,
         state: CompilerState,
     },
     IfCompileFalse {
         test_asm: Vec<Statement>,
-        false_expr: AstList,
+        false_expr: Vec<AstNode>,
         state: CompilerState,
     },
     IfCompileDone {
@@ -260,7 +254,7 @@ pub enum CompilerAction {
 
 pub fn compile_function(
     base_environment: &EnvironmentFrame,
-    code: AstList,
+    code: Vec<AstNode>,
 ) -> Result<SchemeFunction, CompilerError> {
     let mut stack = vec![CompilerAction::FunctionDone];
 
@@ -276,109 +270,132 @@ pub fn compile_function(
 
     'stack_loop: while let Some(action) = stack.pop() {
         match action {
-            CompilerAction::Compile { code, state } => {
-                if code.is_improper_list() {
-                    return Err(CompilerError::SyntaxError);
-                }
-                let mut expr_iter = code.iter();
+            CompilerAction::Compile {
+                code,
+                code_n,
+                state,
+            } => {
+                let mut expr_iter = code[code_n..].iter();
                 while let Some(expr) = expr_iter.next() {
                     //Function call/Macro use
-                    if let Some(list) = expr.to_list() {
-                        let rest: AstList = expr_iter.collect();
-
-                        //Backup the rest of the expressions in this block
-                        if !rest.is_empty_list() {
-                            stack.push(CompilerAction::Compile { code: rest, state })
-                        }
-
-                        if list.is_improper_list() {
-                            return Err(CompilerError::SyntaxError);
-                        }
-
-                        let mut list_iter = list.iter();
-
-                        let function_object = if let Some(node) = list_iter.next() {
-                            node
-                        } else {
-                            return Err(CompilerError::SyntaxError);
-                        };
-
-                        let argv: AstList = list_iter.collect();
-
-                        //If the name is a macro, expand the macro
-                        if let Some(function_name) = function_object.to_symbol() {
-                            let calling_function = function.lookup(&function_name)?;
-                            if let CompilerType::Macro(s_macro) = calling_function {
-                                let code = current_code_block;
-                                current_code_block = Vec::new();
-
-                                stack.push(CompilerAction::EmitAsm { statements: code });
-                                stack.append(&mut s_macro.expand(argv, &mut function, state)?);
-                                continue 'stack_loop;
+                    let list_or_err = expr.to_proper_list();
+                    let list_parsed = match list_or_err {
+                        Some(mut argv) => {
+                            //Backup the rest of the expressions in this block
+                            let code_n = code.len() - expr_iter.as_slice().len();
+                            if code_n != code.len() {
+                                stack.push(CompilerAction::Compile {
+                                    code,
+                                    code_n,
+                                    state,
+                                })
                             }
-                        }
 
-                        let argc = argv.len();
+                            let function_object = if !argv.is_empty() {
+                                argv.remove(0)
+                            } else {
+                                return Err(CompilerError::SyntaxError);
+                            };
 
-                        let s_type = if let CompilerState::Tail = state {
-                            StatementType::Tail
-                        } else {
-                            StatementType::Call
-                        };
+                            //If the name is a macro, expand the macro
+                            if let Some(function_name) = function_object.to_symbol() {
+                                let calling_function = function.lookup(&function_name)?;
+                                if let CompilerType::Macro(s_macro) = calling_function {
+                                    let code = current_code_block;
+                                    current_code_block = Vec::new();
 
-                        //Compile the call to the function
-                        let mut statements = vec![Statement {
-                            s_type,
-                            arg: argc as u32,
-                        }];
+                                    stack.push(CompilerAction::EmitAsm { statements: code });
+                                    stack.append(&mut s_macro.expand(
+                                        argv,
+                                        &mut function,
+                                        state,
+                                    )?);
+                                    continue 'stack_loop;
+                                }
+                            }
 
-                        if let CompilerState::Body = state {
-                            statements.push(Statement {
-                                s_type: StatementType::Discard,
-                                arg: 0,
-                            })
-                        };
+                            let argc = argv.len();
 
-                        stack.push(CompilerAction::EmitAsm { statements });
+                            let s_type = if let CompilerState::Tail = state {
+                                StatementType::Tail
+                            } else {
+                                StatementType::Call
+                            };
 
-                        let function_name = AstList::one(function_object.clone());
+                            //Compile the call to the function
+                            let mut statements = vec![Statement {
+                                s_type,
+                                arg: argc as u32,
+                            }];
 
-                        //Compile the arguments to the function
-                        if !argv.is_empty_list() {
+                            if let CompilerState::Body = state {
+                                statements.push(Statement {
+                                    s_type: StatementType::Discard,
+                                    arg: 0,
+                                })
+                            };
+
+                            stack.push(CompilerAction::EmitAsm { statements });
+
+                            let function_name = vec![function_object.clone()];
+
+                            //Compile the arguments to the function
+                            if !argv.is_empty() {
+                                stack.push(CompilerAction::Compile {
+                                    code: argv,
+                                    code_n: 0,
+                                    state: CompilerState::Args,
+                                });
+                            }
+
+                            //Compile expression that evaluates to the function
                             stack.push(CompilerAction::Compile {
-                                code: argv,
+                                code: function_name,
+                                code_n: 0,
                                 state: CompilerState::Args,
                             });
+
+                            continue 'stack_loop;
                         }
+                        None => None,
+                    };
 
-                        //Compile expression that evaluates to the function
-                        stack.push(CompilerAction::Compile {
-                            code: function_name,
-                            state: CompilerState::Args,
-                        });
+                    let res = list_parsed.or_else(|| {
+                        expr.to_symbol().map(|ident_name| {
+                            let ident_or_macro = function.lookup(&ident_name)?;
 
-                        continue 'stack_loop;
-                    } else if let Some(ident_name) = expr.to_symbol() {
-                        let ident_or_macro = function.lookup(&ident_name)?;
+                            if let CompilerType::Runtime(ident) = ident_or_macro {
+                                if let CompilerState::Body = state {
+                                } else {
+                                    current_code_block.push(Statement {
+                                        s_type: StatementType::Get,
+                                        arg: ident,
+                                    })
+                                }
+                            } else {
+                                return Err(CompilerError::SyntaxError);
+                            }
+                            Ok(())
+                        })
+                    });
 
-                        if let CompilerType::Runtime(ident) = ident_or_macro {
+                    match res {
+                        Some(Err(err)) => return Err(err),
+                        Some(Ok(_)) => (),
+                        None => {
+                            if expr.is_improper_list() {
+                                return Err(CompilerError::SyntaxError);
+                            }
+
                             if let CompilerState::Body = state {
                             } else {
                                 current_code_block.push(Statement {
-                                    s_type: StatementType::Get,
-                                    arg: ident,
-                                })
+                                    s_type: StatementType::Literal,
+                                    arg: function.compiled_code.literal_len() as u32,
+                                });
+                                function.compiled_code.new_literal(expr.to_datum());
                             }
-                        } else {
-                            return Err(CompilerError::SyntaxError);
                         }
-                    } else if let CompilerState::Body = state {
-                    } else {
-                        current_code_block.push(Statement {
-                            s_type: StatementType::Literal,
-                            arg: function.compiled_code.literal_len() as u32,
-                        });
-                        function.compiled_code.new_literal(expr.to_datum());
                     }
                 }
             }
@@ -408,6 +425,7 @@ pub fn compile_function(
                 });
                 stack.push(CompilerAction::Compile {
                     code: true_expr,
+                    code_n: 0,
                     state,
                 });
                 current_code_block = Vec::new();
@@ -423,6 +441,7 @@ pub fn compile_function(
                 });
                 stack.push(CompilerAction::Compile {
                     code: false_expr,
+                    code_n: 0,
                     state,
                 });
                 current_code_block = Vec::new();

@@ -20,11 +20,10 @@
 use crate::types::pair::ListFactory;
 use crate::types::*;
 use std::cell::Cell;
-use std::iter::FromIterator;
 use std::thread::{self, ThreadId};
 
 thread_local! {
-    static TEMP_COUNT: Cell<usize> = Cell::new(0);
+    static TEMP_COUNT: Cell<u64> = Cell::new(0);
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -53,7 +52,7 @@ impl CoreSymbol {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum AstSymbolInner {
     Core(CoreSymbol),
-    Temp((usize, ThreadId)),
+    Temp((u64, ThreadId)),
     Defined(String),
 }
 
@@ -69,7 +68,7 @@ impl AstSymbol {
         let count = TEMP_COUNT.with(|count| {
             let ret = count.get();
             count.set(ret + 1);
-            if ret == usize::max_value() {
+            if ret == u64::max_value() {
                 panic!("Temporary count overflowed!")
             }
             ret
@@ -94,14 +93,22 @@ impl From<CoreSymbol> for AstSymbol {
 }
 
 #[derive(Clone, Debug)]
-pub enum ListTerminator {
-    EmptyList,
-    Node(Box<AstNode>),
+enum ListType {
+    Proper,
+    Improper(Box<AstNode>),
 }
 
-impl ListTerminator {
-    fn is_empty_list(&self) -> bool {
-        if let ListTerminator::EmptyList = self {
+impl ListType {
+    fn is_proper_list(&self) -> bool {
+        if let ListType::Proper = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn is_improper_list(&self) -> bool {
+        if let ListType::Improper(_) = self {
             true
         } else {
             false
@@ -110,8 +117,8 @@ impl ListTerminator {
 
     fn to_datum(&self) -> SchemeType {
         match self {
-            ListTerminator::EmptyList => SchemeType::EmptyList,
-            ListTerminator::Node(node) => node.to_datum(),
+            ListType::Proper => SchemeType::EmptyList,
+            ListType::Improper(node) => node.to_datum(),
         }
     }
 }
@@ -119,67 +126,64 @@ impl ListTerminator {
 #[derive(Clone, Debug)]
 pub struct AstList {
     nodes: Vec<AstNode>,
-    terminator: ListTerminator,
+    list_type: ListType,
 }
 
 impl AstList {
     pub fn none() -> AstList {
         AstList {
             nodes: Vec::new(),
-            terminator: ListTerminator::EmptyList,
+            list_type: ListType::Proper,
         }
     }
 
     pub fn one(node: AstNode) -> AstList {
         AstList {
             nodes: vec![node],
-            terminator: ListTerminator::EmptyList,
+            list_type: ListType::Proper,
         }
     }
 
-    pub fn is_empty_list(&self) -> bool {
-        self.nodes.is_empty() && self.terminator.is_empty_list()
+    pub fn is_proper_list(&self) -> bool {
+        self.list_type.is_proper_list()
     }
 
     pub fn is_improper_list(&self) -> bool {
-        !self.terminator.is_empty_list()
+        self.list_type.is_improper_list()
     }
 
-    pub fn get_terminator(&self) -> ListTerminator {
-        self.terminator.clone()
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &AstNode> + '_ {
-        self.nodes.iter()
-    }
-
-    pub fn len(&self) -> usize {
-        self.nodes.len()
-    }
-}
-
-impl FromIterator<AstNode> for AstList {
-    fn from_iter<T>(iter: T) -> AstList
-    where
-        T: IntoIterator<Item = AstNode>,
-    {
-        let mut builder = AstListBuilder::new();
-
-        for node in iter {
-            builder.push(node)
+    pub fn into_proper_list(self) -> Result<Vec<AstNode>, AstList> {
+        if let ListType::Proper = self.list_type {
+            Ok(self.nodes)
+        } else {
+            Err(self)
         }
+    }
 
-        builder.build()
+    pub fn into_improper_list(self) -> Result<ImproperList, AstList> {
+        if let ListType::Improper(terminator) = self.list_type {
+            Ok(ImproperList {
+                nodes: self.nodes,
+                terminator: *terminator,
+            })
+        } else {
+            Err(self)
+        }
     }
 }
 
-impl<'a> FromIterator<&'a AstNode> for AstList {
-    fn from_iter<T>(iter: T) -> AstList
-    where
-        T: IntoIterator<Item = &'a AstNode>,
-    {
-        iter.into_iter().cloned().collect()
+impl From<Vec<AstNode>> for AstList {
+    fn from(list: Vec<AstNode>) -> AstList {
+        AstList {
+            nodes: list,
+            list_type: ListType::Proper,
+        }
     }
+}
+
+pub struct ImproperList {
+    pub nodes: Vec<AstNode>,
+    pub terminator: AstNode,
 }
 
 pub struct AstListBuilder {
@@ -195,28 +199,29 @@ impl AstListBuilder {
         self.nodes.push(node)
     }
 
-    fn build_with_terminator(mut self, terminator: ListTerminator) -> AstList {
+    fn build_with_type(mut self, list_type: ListType) -> AstList {
         self.nodes.shrink_to_fit();
         AstList {
             nodes: self.nodes,
-            terminator,
+            list_type,
         }
     }
 
     pub fn build(self) -> AstList {
-        self.build_with_terminator(ListTerminator::EmptyList)
+        self.build_with_type(ListType::Proper)
     }
 
-    pub fn build_with_tail(mut self, node: AstNode) -> AstList {
+    pub fn build_with_tail(mut self, node: AstNode) -> Option<AstList> {
         if let AstNodeInner::List(mut list) = node.0 {
-            if self.nodes.is_empty() {
-                self.build()
-            } else {
-                self.nodes.append(&mut list.nodes);
-                self.build_with_terminator(list.terminator)
+            if self.nodes.is_empty() && list.is_improper_list() {
+                return None;
             }
+
+            self.nodes.append(&mut list.nodes);
+
+            Some(self.build_with_type(list.list_type))
         } else {
-            self.build_with_terminator(ListTerminator::Node(Box::new(node)))
+            Some(self.build_with_type(ListType::Improper(Box::new(node))))
         }
     }
 }
@@ -254,14 +259,45 @@ impl AstNode {
             AstNodeInner::List(list) => {
                 let mut builder = ListFactory::new();
 
-                for node in list.iter() {
+                for node in list.nodes.iter() {
                     builder.push(node.to_datum())
                 }
 
-                builder.build_with_tail(list.terminator.to_datum()).into()
+                builder.build_with_tail(list.list_type.to_datum()).into()
             }
             AstNodeInner::Bool(boolean) => SchemeType::Bool(*boolean),
         }
+    }
+
+    pub fn as_list(&self) -> Option<&AstList> {
+        if let AstNodeInner::List(list) = &self.0 {
+            Some(list)
+        } else {
+            None
+        }
+    }
+
+    pub fn into_symbol(self) -> Result<AstSymbol, AstNode> {
+        if let AstNodeInner::Symbol(sym) = self.0 {
+            Ok(sym)
+        } else {
+            Err(self)
+        }
+    }
+
+    pub fn into_list(self) -> Result<AstList, AstNode> {
+        if let AstNodeInner::List(list) = self.0 {
+            Ok(list)
+        } else {
+            Err(self)
+        }
+    }
+
+    pub fn into_proper_list(self) -> Result<Vec<AstNode>, AstNode> {
+        let list = self.into_list()?;
+
+        list.into_proper_list()
+            .map_err(|list| AstNode(AstNodeInner::List(list)))
     }
 
     pub fn to_symbol(&self) -> Option<AstSymbol> {
@@ -272,11 +308,27 @@ impl AstNode {
         }
     }
 
-    pub fn to_list(&self) -> Option<AstList> {
-        if let AstNodeInner::List(list) = &self.0 {
-            Some(list.clone())
+    pub fn to_proper_list(&self) -> Option<Vec<AstNode>> {
+        if self.is_proper_list() {
+            self.clone().into_proper_list().ok()
         } else {
             None
+        }
+    }
+
+    pub fn is_proper_list(&self) -> bool {
+        if let Some(list) = self.as_list() {
+            list.is_proper_list()
+        } else {
+            false
+        }
+    }
+
+    pub fn is_improper_list(&self) -> bool {
+        if let Some(list) = self.as_list() {
+            list.is_improper_list()
+        } else {
+            false
         }
     }
 }
@@ -297,5 +349,12 @@ impl From<AstSymbol> for AstNode {
 impl From<AstList> for AstNode {
     fn from(list: AstList) -> AstNode {
         AstNode(AstNodeInner::List(list))
+    }
+}
+
+impl From<Vec<AstNode>> for AstNode {
+    fn from(list: Vec<AstNode>) -> AstNode {
+        let list_object: AstList = list.into();
+        list_object.into()
     }
 }
