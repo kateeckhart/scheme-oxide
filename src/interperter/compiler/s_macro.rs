@@ -181,8 +181,7 @@ impl BuiltinMacro {
                         state,
                     },
                     CompilerAction::Compile {
-                        code: vec![test],
-                        code_n: 0,
+                        code: vec![test].into_iter(),
                         state: CompilerState::Args,
                     },
                 ])
@@ -210,8 +209,7 @@ impl BuiltinMacro {
                 if let CompilerState::Body = state {
                 } else {
                     ret.push(CompilerAction::Compile {
-                        code: vec![CoreSymbol::GenUnspecified.into()],
-                        code_n: 0,
+                        code: vec![CoreSymbol::GenUnspecified.into()].into_iter(),
                         state,
                     });
                 }
@@ -224,8 +222,7 @@ impl BuiltinMacro {
                 });
 
                 ret.push(CompilerAction::Compile {
-                    code: vec![expr],
-                    code_n: 0,
+                    code: vec![expr].into_iter(),
                     state: CompilerState::Args,
                 });
 
@@ -236,8 +233,7 @@ impl BuiltinMacro {
                 code.append(&mut args);
 
                 Ok(vec![CompilerAction::Compile {
-                    code,
-                    code_n: 0,
+                    code: code.into_iter(),
                     state,
                 }])
             }
@@ -299,8 +295,7 @@ impl BuiltinMacro {
                 ret_list.append(&mut bindings);
 
                 Ok(vec![CompilerAction::Compile {
-                    code: vec![ret_list.into()],
-                    code_n: 0,
+                    code: vec![ret_list.into()].into_iter(),
                     state,
                 }])
             }
@@ -326,8 +321,7 @@ impl BuiltinMacro {
                 };
 
                 Ok(vec![CompilerAction::Compile {
-                    code: vec![expr],
-                    code_n: 0,
+                    code: vec![expr].into_iter(),
                     state,
                 }])
             }
@@ -358,8 +352,7 @@ impl BuiltinMacro {
                 };
 
                 Ok(vec![CompilerAction::Compile {
-                    code: vec![expr],
-                    code_n: 0,
+                    code: vec![expr].into_iter(),
                     state,
                 }])
             }

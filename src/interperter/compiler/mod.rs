@@ -22,6 +22,7 @@ use crate::interperter::vm::{SchemeFunction, Statement, StatementType};
 use crate::types::*;
 use std::collections::HashMap;
 use std::ops::DerefMut;
+use std::vec;
 
 mod s_macro;
 use self::s_macro::{BuiltinMacro, SchemeMacro};
@@ -129,20 +130,16 @@ fn push_tail_body(
         return Err(CompilerError::SyntaxError);
     }
 
-    let body: Vec<AstNode> = code.drain(..code.len() - 1).collect();
-
     let tail = code.pop().unwrap();
 
     stack.push(CompilerAction::Compile {
-        code: vec![tail],
-        code_n: 0,
+        code: vec![tail].into_iter(),
         state: CompilerState::Tail,
     });
 
-    if !body.is_empty() {
+    if !code.is_empty() {
         stack.push(CompilerAction::Compile {
-            code: body,
-            code_n: 0,
+            code: code.into_iter(),
             state: CompilerState::Body,
         })
     }
@@ -228,8 +225,7 @@ pub enum CompilerState {
 #[derive(Debug)]
 pub enum CompilerAction {
     Compile {
-        code: Vec<AstNode>,
-        code_n: usize,
+        code: vec::IntoIter<AstNode>,
         state: CompilerState,
     },
     FunctionDone,
@@ -270,26 +266,14 @@ pub fn compile_function(
 
     'stack_loop: while let Some(action) = stack.pop() {
         match action {
-            CompilerAction::Compile {
-                code,
-                code_n,
-                state,
-            } => {
-                let mut expr_iter = code[code_n..].iter();
-                while let Some(expr) = expr_iter.next() {
+            CompilerAction::Compile { mut code, state } => {
+                while let Some(expr) = code.next() {
                     //Function call/Macro use
                     let list_or_err = expr.to_proper_list();
                     let list_parsed = match list_or_err {
                         Some(mut argv) => {
                             //Backup the rest of the expressions in this block
-                            let code_n = code.len() - expr_iter.as_slice().len();
-                            if code_n != code.len() {
-                                stack.push(CompilerAction::Compile {
-                                    code,
-                                    code_n,
-                                    state,
-                                })
-                            }
+                            stack.push(CompilerAction::Compile { code, state });
 
                             let function_object = if !argv.is_empty() {
                                 argv.remove(0)
@@ -342,16 +326,14 @@ pub fn compile_function(
                             //Compile the arguments to the function
                             if !argv.is_empty() {
                                 stack.push(CompilerAction::Compile {
-                                    code: argv,
-                                    code_n: 0,
+                                    code: argv.into_iter(),
                                     state: CompilerState::Args,
                                 });
                             }
 
                             //Compile expression that evaluates to the function
                             stack.push(CompilerAction::Compile {
-                                code: function_name,
-                                code_n: 0,
+                                code: function_name.into_iter(),
                                 state: CompilerState::Args,
                             });
 
@@ -424,8 +406,7 @@ pub fn compile_function(
                     state,
                 });
                 stack.push(CompilerAction::Compile {
-                    code: true_expr,
-                    code_n: 0,
+                    code: true_expr.into_iter(),
                     state,
                 });
                 current_code_block = Vec::new();
@@ -440,8 +421,7 @@ pub fn compile_function(
                     true_asm: current_code_block,
                 });
                 stack.push(CompilerAction::Compile {
-                    code: false_expr,
-                    code_n: 0,
+                    code: false_expr.into_iter(),
                     state,
                 });
                 current_code_block = Vec::new();
