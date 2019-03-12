@@ -17,10 +17,8 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::fmt::{self, Display, Formatter};
-
 pub mod pair;
-pub use self::pair::{NullableSchemePair, SchemePair};
+pub use self::pair::SchemePair;
 use crate::interperter::FunctionRef;
 
 #[derive(Clone, PartialEq, Debug)]
@@ -68,43 +66,17 @@ impl SchemeType {
     }
 }
 
-impl Display for SchemeType {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        match self {
-            SchemeType::Pair(pair) => pair.fmt(f)?,
-            SchemeType::Number(num) => num.fmt(f)?,
-            SchemeType::String(string) => {
-                write!(f, "\"")?;
-                for c in string.chars() {
-                    match c {
-                        '"' => write!(f, r#"\""#)?,
-                        '\\' => write!(f, r"\\")?,
-                        _ => c.fmt(f)?,
-                    }
-                }
-                write!(f, "\"")?;
-            }
-            SchemeType::Symbol(symbol) => symbol.fmt(f)?,
-            SchemeType::EmptyList => write!(f, "()")?,
-            SchemeType::Bool(true) => write!(f, "#t")?,
-            SchemeType::Bool(false) => write!(f, "#f")?,
-            _ => return Err(fmt::Error),
-        }
-        Ok(())
-    }
-}
-
 impl From<SchemePair> for SchemeType {
     fn from(pair: SchemePair) -> SchemeType {
         SchemeType::Pair(pair)
     }
 }
 
-impl From<NullableSchemePair> for SchemeType {
-    fn from(pair: NullableSchemePair) -> SchemeType {
-        match pair.into_option() {
+impl From<Option<SchemePair>> for SchemeType {
+    fn from(pair: Option<SchemePair>) -> SchemeType {
+        match pair {
+            Some(x) => x.into(),
             None => SchemeType::EmptyList,
-            Some(contents) => SchemeType::Pair(contents),
         }
     }
 }

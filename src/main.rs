@@ -62,5 +62,5 @@ fn main() {
     let mut prog = String::new();
     file.read_to_string(&mut prog).unwrap();
 
-    println!("{}", interperter::eval(&prog).unwrap());
+    println!("{:?}", interperter::eval(&prog).unwrap());
 }
