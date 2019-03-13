@@ -283,58 +283,51 @@ impl BuiltinMacro {
                     }
                 };
 
+                let mut formals = Vec::new();
+                let mut bindings = Vec::new();
+
+                for definition_or_err in definitions {
+                    let mut definition = if let Ok(def) = definition_or_err.into_proper_list() {
+                        def
+                    } else {
+                        return Err(CompilerError::SyntaxError);
+                    };
+
+                    if definition.len() != 2 {
+                        return Err(CompilerError::SyntaxError);
+                    }
+
+                    bindings.push(definition.pop().unwrap());
+                    formals.push(definition.pop().unwrap());
+                }
+
+                let mut lambda_def = vec![CoreSymbol::Lambda.into(), formals.into()];
+                lambda_def.append(&mut args);
+
                 let expr = match self_name {
                     Some(name) => {
-                        let mut let_list = vec![CoreSymbol::Let.into(), definitions.into()];
-                        let_list.append(&mut args);
-
-                        let lamaba_list = vec![
-                            CoreSymbol::Lambda.into(),
-                            Vec::new().into(),
-                            let_list.into(),
-                        ];
                         let set_list = vec![
                             CoreSymbol::Set.into(),
                             name.clone().into(),
-                            lamaba_list.into(),
+                            lambda_def.into(),
                         ];
 
-                        let binding = vec![name.clone().into(), AstNode::from_bool(false)].into();
+                        let mut func_call = vec![name.clone().into()];
+                        func_call.append(&mut bindings);
+
+                        let outer_binding = vec![name.into(), AstNode::from_bool(false)].into();
                         vec![
                             CoreSymbol::Let.into(),
-                            vec![binding].into(),
+                            vec![outer_binding].into(),
                             set_list.into(),
-                            vec![name.into()].into(),
+                            func_call.into(),
                         ]
                         .into()
                     }
                     None => {
-                        let mut formals = Vec::new();
-                        let mut bindings = Vec::new();
-
-                        for definition_or_err in definitions {
-                            let mut definition =
-                                if let Ok(def) = definition_or_err.into_proper_list() {
-                                    def
-                                } else {
-                                    return Err(CompilerError::SyntaxError);
-                                };
-
-                            if definition.len() != 2 {
-                                return Err(CompilerError::SyntaxError);
-                            }
-
-                            bindings.push(definition.pop().unwrap());
-                            formals.push(definition.pop().unwrap());
-                        }
-
-                        let mut lambda_def = vec![CoreSymbol::Lambda.into(), formals.into()];
-                        lambda_def.append(&mut args);
-
-                        let mut ret_list = vec![lambda_def.into()];
-                        ret_list.append(&mut bindings);
-
-                        ret_list.into()
+                        let mut func_call = vec![lambda_def.into()];
+                        func_call.append(&mut bindings);
+                        vec![func_call.into()].into()
                     }
                 };
 
