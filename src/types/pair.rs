@@ -30,7 +30,6 @@ impl PartialEq for SchemePair {
     }
 }
 
-
 impl SchemePair {
     pub fn new(one: SchemeType, two: SchemeType) -> Self {
         SchemePair(Rc::new(RefCell::new((one, two))))

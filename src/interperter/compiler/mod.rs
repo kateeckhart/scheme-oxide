@@ -82,6 +82,10 @@ impl EnvironmentFrame {
             AstSymbol::new("set!"),
             SchemeMacro::Builtin(BuiltinMacro::Set),
         );
+        self.push_macro(
+            CoreSymbol::Set.into(),
+            SchemeMacro::Builtin(BuiltinMacro::Set),
+        );
         self.push_macro(AstSymbol::new("or"), SchemeMacro::Builtin(BuiltinMacro::Or));
         self.push_macro(
             CoreSymbol::Or.into(),

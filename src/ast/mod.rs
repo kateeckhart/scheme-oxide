@@ -33,6 +33,7 @@ pub enum CoreSymbol {
     Let,
     Lambda,
     If,
+    Set,
     GenUnspecified,
 }
 
@@ -44,6 +45,7 @@ impl CoreSymbol {
             CoreSymbol::Let => "let",
             CoreSymbol::Lambda => "lambda",
             CoreSymbol::If => "if",
+            CoreSymbol::Set => "set",
             CoreSymbol::GenUnspecified => "$gen_unspecified",
         }
     }

@@ -264,38 +264,82 @@ impl BuiltinMacro {
                     return Err(CompilerError::SyntaxError);
                 }
 
-                let definitions = if let Ok(def) = args.remove(0).into_proper_list() {
-                    def
-                } else {
-                    return Err(CompilerError::SyntaxError);
+                let (self_name, definitions) = match args.remove(0).into_proper_list() {
+                    Ok(def) => (None, def),
+                    Err(node) => {
+                        let self_name = if let Ok(sym) = node.into_symbol() {
+                            sym
+                        } else {
+                            return Err(CompilerError::SyntaxError);
+                        };
+
+                        let defin = if let Ok(def) = args.remove(0).into_proper_list() {
+                            def
+                        } else {
+                            return Err(CompilerError::SyntaxError);
+                        };
+
+                        (Some(self_name), defin)
+                    }
                 };
 
-                let mut formals = Vec::new();
-                let mut bindings = Vec::new();
+                let expr = match self_name {
+                    Some(name) => {
+                        let mut let_list = vec![CoreSymbol::Let.into(), definitions.into()];
+                        let_list.append(&mut args);
 
-                for definition_or_err in definitions {
-                    let mut definition = if let Ok(def) = definition_or_err.into_proper_list() {
-                        def
-                    } else {
-                        return Err(CompilerError::SyntaxError);
-                    };
+                        let lamaba_list = vec![
+                            CoreSymbol::Lambda.into(),
+                            Vec::new().into(),
+                            let_list.into(),
+                        ];
+                        let set_list = vec![
+                            CoreSymbol::Set.into(),
+                            name.clone().into(),
+                            lamaba_list.into(),
+                        ];
 
-                    if definition.len() != 2 {
-                        return Err(CompilerError::SyntaxError);
+                        let binding = vec![name.clone().into(), AstNode::from_bool(false)].into();
+                        vec![
+                            CoreSymbol::Let.into(),
+                            vec![binding].into(),
+                            set_list.into(),
+                            vec![name.into()].into(),
+                        ]
+                        .into()
                     }
+                    None => {
+                        let mut formals = Vec::new();
+                        let mut bindings = Vec::new();
 
-                    bindings.push(definition.pop().unwrap());
-                    formals.push(definition.pop().unwrap());
-                }
+                        for definition_or_err in definitions {
+                            let mut definition =
+                                if let Ok(def) = definition_or_err.into_proper_list() {
+                                    def
+                                } else {
+                                    return Err(CompilerError::SyntaxError);
+                                };
 
-                let mut lambda_def = vec![CoreSymbol::Lambda.into(), formals.into()];
-                lambda_def.append(&mut args);
+                            if definition.len() != 2 {
+                                return Err(CompilerError::SyntaxError);
+                            }
 
-                let mut ret_list = vec![lambda_def.into()];
-                ret_list.append(&mut bindings);
+                            bindings.push(definition.pop().unwrap());
+                            formals.push(definition.pop().unwrap());
+                        }
+
+                        let mut lambda_def = vec![CoreSymbol::Lambda.into(), formals.into()];
+                        lambda_def.append(&mut args);
+
+                        let mut ret_list = vec![lambda_def.into()];
+                        ret_list.append(&mut bindings);
+
+                        ret_list.into()
+                    }
+                };
 
                 Ok(vec![CompilerAction::Compile {
-                    code: vec![ret_list.into()].into_iter(),
+                    code: vec![expr].into_iter(),
                     state,
                 }])
             }
