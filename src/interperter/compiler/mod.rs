@@ -236,6 +236,9 @@ pub enum CompilerAction {
     EmitAsm {
         statements: Vec<Statement>,
     },
+    PrependAsm {
+        statements: Vec<Statement>,
+    },
     IfCompileTrue {
         true_expr: Vec<AstNode>,
         false_expr: Vec<AstNode>,
@@ -292,7 +295,7 @@ pub fn compile_function(
                                     let code = current_code_block;
                                     current_code_block = Vec::new();
 
-                                    stack.push(CompilerAction::EmitAsm { statements: code });
+                                    stack.push(CompilerAction::PrependAsm { statements: code });
                                     stack.append(&mut s_macro.expand(
                                         argv,
                                         &mut function,
@@ -384,6 +387,10 @@ pub fn compile_function(
                         }
                     }
                 }
+            }
+            CompilerAction::PrependAsm { mut statements } => {
+                statements.append(&mut current_code_block);
+                current_code_block = statements
             }
             CompilerAction::EmitAsm { mut statements } => {
                 current_code_block.append(&mut statements);
