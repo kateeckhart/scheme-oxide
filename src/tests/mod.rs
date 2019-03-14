@@ -18,6 +18,7 @@
 */
 
 use crate::interperter::eval;
+use crate::types::*;
 
 #[test]
 fn add_zero() {
@@ -61,30 +62,11 @@ fn add_three() {
     }
 }
 
-//TODO: Rewrite test.
-/*#[test]
+#[test]
 fn list_fun() {
-    let mut env = MAIN_ENVIRONMENT.with(|env| env.clone());
-
     assert_eq!(eval("(list)").unwrap(), SchemeType::EmptyList);
-    let list: Vec<_> = eval("(list 1 2 3 4 5)")
-        .unwrap()
-        .to_pair()
-        .unwrap()
-        .iter()
-        .map(|x| x.unwrap().to_number().unwrap())
-        .collect();
-    let list_ref: &[i64] = &list;
-    let expected_list: &[i64] = &[1, 2, 3, 4, 5];
-    assert_eq!(list_ref, expected_list);
-
-    let verbose: Vec<_> = eval("(list . (1 . (2 . (3 . (4 . (5 . ()))))))")
-        .unwrap()
-        .to_pair()
-        .unwrap()
-        .iter()
-        .map(|x| x.unwrap().to_number().unwrap())
-        .collect();
-    let verbose_ref: &[i64] = &verbose;
-    assert_eq!(verbose_ref, expected_list);
-}*/
+    assert_eq!(
+        eval("(equal? (list 1 2 (list 3 4) 5 6) '(1 2 (3 4) 5 6))").unwrap(),
+        SchemeType::Bool(true)
+    );
+}

@@ -36,6 +36,14 @@ pub enum SchemeType {
 pub struct CastError;
 
 impl SchemeType {
+    pub fn is_pair(&self) -> bool {
+        if let SchemeType::Pair(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn to_number(&self) -> Result<i64, CastError> {
         if let SchemeType::Number(num) = self {
             Ok(*num)

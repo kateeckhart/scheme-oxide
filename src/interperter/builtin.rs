@@ -30,6 +30,7 @@ pub enum BuiltinFunction {
     Cdr,
     SetCar,
     SetCdr,
+    IsPair,
     Sub,
     Compare { invert: bool, mode: Ordering },
     Eqv,
@@ -105,7 +106,7 @@ impl BuiltinFunction {
                     return Err(RuntimeError::ArgError);
                 }
 
-                Ok(Some(args[1].to_pair()?.get_cdr()))
+                Ok(Some(args[0].to_pair()?.get_cdr()))
             }
             BuiltinFunction::SetCar => {
                 if args.len() != 2 {
@@ -124,6 +125,13 @@ impl BuiltinFunction {
                 args[1].to_pair()?.set_cdr(args[1].clone());
 
                 BuiltinFunction::GenUnspecified.call_with_stack(stack, Vec::new())
+            }
+            BuiltinFunction::IsPair => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                Ok(Some(SchemeType::Bool(args.pop().unwrap().is_pair())))
             }
             BuiltinFunction::Eqv => {
                 if args.len() != 2 {

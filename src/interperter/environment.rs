@@ -106,13 +106,33 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_builtin_function(AstSymbol::new("set_cdr!"), BuiltinFunction::SetCdr);
     ret.push_builtin_function(AstSymbol::new("cdr"), BuiltinFunction::Cdr);
     ret.push_builtin_function(AstSymbol::new("cons"), BuiltinFunction::Cons);
+    ret.push_builtin_function(AstSymbol::new("pair?"), BuiltinFunction::IsPair);
 
     ret.push_builtin_function(AstSymbol::new("eqv?"), BuiltinFunction::Eqv);
     ret.push_builtin_function(AstSymbol::new("quotient"), BuiltinFunction::Quotient);
     ret.push_builtin_function(AstSymbol::new("remainder"), BuiltinFunction::Remainder);
 
+    ret.push_builtin_function(
+        CoreSymbol::GenUnspecified.into(),
+        BuiltinFunction::GenUnspecified,
+    );
+    ret.push_builtin_function(
+        AstSymbol::new("$gen_unspecified"),
+        BuiltinFunction::GenUnspecified,
+    );
+
     ret.push_eval(AstSymbol::new("eq?"), "(lambda (x y) (eqv? x y))")
         .unwrap();
+    ret.push_eval(AstSymbol::new("null?"), "(lambda (x) (eqv? x '()))")
+        .unwrap();
+    ret.push_eval(AstSymbol::new("equal?"), "
+        (lambda (x y)
+            (let equal? ((x x) (y y))
+                (cond
+                    ((and (pair? x) (pair? y)) (and (equal? (car x) (car y)) (equal? (cdr x) (cdr y))))
+                    (else (eqv? x y))))
+        )").unwrap();
+
     ret.push_eval(AstSymbol::new("not"), "(lambda (x) (if x #f #t))")
         .unwrap();
     ret.push_eval(
@@ -120,8 +140,6 @@ fn gen_scheme_environment() -> BaseEnvironment {
         "(lambda (x) (or (eqv? x #t) (eqv? x #f)))",
     )
     .unwrap();
-    ret.push_eval(AstSymbol::new("null?"), "(lambda (x) (eqv? x '()))")
-        .unwrap();
 
     ret.push_eval(AstSymbol::new("zero?"), "(lambda (x) (= x 0))")
         .unwrap();
@@ -137,15 +155,6 @@ fn gen_scheme_environment() -> BaseEnvironment {
     .unwrap();
     ret.push_eval(AstSymbol::new("list"), "(lambda list list)")
         .unwrap();
-
-    ret.push_builtin_function(
-        CoreSymbol::GenUnspecified.into(),
-        BuiltinFunction::GenUnspecified,
-    );
-    ret.push_builtin_function(
-        AstSymbol::new("$gen_unspecified"),
-        BuiltinFunction::GenUnspecified,
-    );
 
     ret
 }

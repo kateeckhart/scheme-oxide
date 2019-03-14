@@ -104,7 +104,6 @@ impl BuiltinMacro {
                         formal_len = formals.len() as u32;
 
                         for raw_formal in formals {
-                            formal_len += 1;
                             let formal = if let Ok(symbol) = raw_formal.into_symbol() {
                                 symbol
                             } else {
@@ -332,7 +331,8 @@ impl BuiltinMacro {
                     None => {
                         let mut func_call = vec![lambda_def.into()];
                         func_call.append(&mut bindings);
-                        vec![func_call.into()].into()
+
+                        func_call.into()
                     }
                 };
 
