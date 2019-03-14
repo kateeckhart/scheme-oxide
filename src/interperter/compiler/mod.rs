@@ -21,7 +21,7 @@ use crate::ast::{AstNode, AstSymbol, CoreSymbol};
 use crate::interperter::vm::{SchemeFunction, Statement, StatementType};
 use crate::types::*;
 use std::collections::HashMap;
-use std::ops::DerefMut;
+use std::ops::{Deref, DerefMut};
 use std::vec;
 
 mod s_macro;
@@ -79,6 +79,10 @@ impl EnvironmentFrame {
             SchemeMacro::Builtin(BuiltinMacro::Begin),
         );
         self.push_macro(
+            CoreSymbol::Begin.into(),
+            SchemeMacro::Builtin(BuiltinMacro::Begin),
+        );
+        self.push_macro(
             AstSymbol::new("set!"),
             SchemeMacro::Builtin(BuiltinMacro::Set),
         );
@@ -102,6 +106,10 @@ impl EnvironmentFrame {
         self.push_macro(
             AstSymbol::new("quote"),
             SchemeMacro::Builtin(BuiltinMacro::Quote),
+        );
+        self.push_macro(
+            AstSymbol::new("cond"),
+            SchemeMacro::Builtin(BuiltinMacro::Cond),
         );
     }
 
@@ -216,6 +224,19 @@ impl PartialFunction {
                 }
             }
         }
+    }
+
+    fn is_bounded(&self, name: &AstSymbol) -> bool {
+        let mut current_scope_or_none = Some(self);
+
+        while let Some(current_scope) = current_scope_or_none {
+            if current_scope.environment.lookup(name).is_some() {
+                return true;
+            }
+
+            current_scope_or_none = current_scope.parent.as_ref().map(|x| x.deref());
+        }
+        false
     }
 }
 

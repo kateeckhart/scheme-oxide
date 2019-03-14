@@ -29,6 +29,7 @@ thread_local! {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CoreSymbol {
     And,
+    Begin,
     Or,
     Let,
     Lambda,
@@ -41,6 +42,7 @@ impl CoreSymbol {
     pub fn get_name(self) -> &'static str {
         match self {
             CoreSymbol::And => "and",
+            CoreSymbol::Begin => "begin",
             CoreSymbol::Or => "or",
             CoreSymbol::Let => "let",
             CoreSymbol::Lambda => "lambda",
@@ -94,7 +96,7 @@ impl From<CoreSymbol> for AstSymbol {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum ListType {
     Proper,
     Improper(Box<AstNode>),
@@ -125,7 +127,7 @@ impl ListType {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AstList {
     nodes: Vec<AstNode>,
     list_type: ListType,
@@ -152,6 +154,14 @@ impl AstList {
 
     pub fn is_improper_list(&self) -> bool {
         self.list_type.is_improper_list()
+    }
+
+    pub fn as_proper_list(&self) -> Option<&[AstNode]> {
+        if let ListType::Proper = self.list_type {
+            Some(&self.nodes)
+        } else {
+            None
+        }
     }
 
     pub fn into_proper_list(self) -> Result<Vec<AstNode>, AstList> {
@@ -228,7 +238,7 @@ impl AstListBuilder {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum AstNodeInner {
     Number(i64),
     Symbol(AstSymbol),
@@ -237,7 +247,7 @@ enum AstNodeInner {
     Bool(bool),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AstNode(AstNodeInner);
 
 impl AstNode {
@@ -274,6 +284,14 @@ impl AstNode {
     pub fn as_list(&self) -> Option<&AstList> {
         if let AstNodeInner::List(list) = &self.0 {
             Some(list)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_proper_list(&self) -> Option<&[AstNode]> {
+        if let AstNodeInner::List(list) = &self.0 {
+            list.as_proper_list()
         } else {
             None
         }

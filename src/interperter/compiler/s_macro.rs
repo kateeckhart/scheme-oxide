@@ -25,6 +25,13 @@ use crate::ast::{AstList, AstNode, AstSymbol, CoreSymbol};
 use crate::interperter::vm::{SchemeFunction, Statement, StatementType};
 use std::mem::replace;
 
+fn compile_one<T>(node: AstNode, state: CompilerState) -> Result<Vec<CompilerAction>, T> {
+    Ok(vec![CompilerAction::Compile {
+        code: vec![node].into_iter(),
+        state,
+    }])
+}
+
 #[derive(Clone)]
 pub enum SchemeMacro {
     Builtin(BuiltinMacro),
@@ -54,6 +61,7 @@ pub enum BuiltinMacro {
     Let,
     Or,
     And,
+    Cond,
 }
 
 impl BuiltinMacro {
@@ -232,10 +240,7 @@ impl BuiltinMacro {
                 let mut code = vec![CoreSymbol::Let.into(), AstList::none().into()];
                 code.append(&mut args);
 
-                Ok(vec![CompilerAction::Compile {
-                    code: code.into_iter(),
-                    state,
-                }])
+                compile_one(code.into(), state)
             }
             BuiltinMacro::Quote => {
                 if args.len() != 1 {
@@ -331,10 +336,7 @@ impl BuiltinMacro {
                     }
                 };
 
-                Ok(vec![CompilerAction::Compile {
-                    code: vec![expr].into_iter(),
-                    state,
-                }])
+                compile_one(expr, state)
             }
             BuiltinMacro::And => {
                 let expr = if args.is_empty() {
@@ -357,10 +359,7 @@ impl BuiltinMacro {
                     ret_list.into()
                 };
 
-                Ok(vec![CompilerAction::Compile {
-                    code: vec![expr].into_iter(),
-                    state,
-                }])
+                compile_one(expr, state)
             }
             BuiltinMacro::Or => {
                 let expr = if args.is_empty() {
@@ -388,10 +387,54 @@ impl BuiltinMacro {
                     ret_list.into()
                 };
 
-                Ok(vec![CompilerAction::Compile {
-                    code: vec![expr].into_iter(),
-                    state,
-                }])
+                compile_one(expr, state)
+            }
+            BuiltinMacro::Cond => {
+                if args.is_empty() {
+                    return Err(CompilerError::SyntaxError);
+                }
+
+                let mut args_iter = args.into_iter().rev().peekable();
+                let mut else_clase = vec![CoreSymbol::GenUnspecified.into()];
+
+                let raw_borrowed_else_clase = args_iter.peek().unwrap();
+                if let Some(clase) = raw_borrowed_else_clase.as_proper_list() {
+                    let else_symbol = AstSymbol::new("else");
+                    if clase.len() > 1
+                        && clase[0] == else_symbol.clone().into()
+                        && !function.is_bounded(&else_symbol)
+                    {
+                        let mut raw_else_clase =
+                            args_iter.next().unwrap().into_proper_list().unwrap();
+
+                        raw_else_clase.remove(0);
+                        else_clase = vec![CoreSymbol::Begin.into()];
+                        else_clase.append(&mut raw_else_clase);
+                    }
+                }
+
+                for raw_clase in args_iter {
+                    let mut clase = if let Ok(clas) = raw_clase.into_proper_list() {
+                        clas
+                    } else {
+                        return Err(CompilerError::SyntaxError);
+                    };
+
+                    if clase.is_empty() {
+                        return Err(CompilerError::SyntaxError);
+                    }
+
+                    let test = clase.remove(0);
+
+                    let mut begin = vec![CoreSymbol::Begin.into()];
+                    begin.append(&mut clase);
+
+                    let new_else_clase =
+                        vec![CoreSymbol::If.into(), test, begin.into(), else_clase.into()];
+                    else_clase = new_else_clase;
+                }
+
+                compile_one(else_clase.into(), state)
             }
         }
     }
