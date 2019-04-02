@@ -261,13 +261,13 @@ pub enum CompilerAction {
         statements: Vec<Statement>,
     },
     IfCompileTrue {
-        true_expr: Vec<AstNode>,
-        false_expr: Vec<AstNode>,
+        true_expr: AstNode,
+        false_expr: AstNode,
         state: CompilerState,
     },
     IfCompileFalse {
         test_asm: Vec<Statement>,
-        false_expr: Vec<AstNode>,
+        false_expr: AstNode,
         state: CompilerState,
     },
     IfCompileDone {
@@ -297,9 +297,9 @@ pub fn compile_function(
             CompilerAction::Compile { mut code, state } => {
                 while let Some(expr) = code.next() {
                     //Function call/Macro use
-                    let list_or_err = expr.to_proper_list();
-                    let list_parsed = match list_or_err {
-                        Some(mut argv) => {
+                    let list_or_err = expr.into_proper_list();
+                    let list_parsed_or_err = match list_or_err {
+                        Ok(mut argv) => {
                             //Backup the rest of the expressions in this block
                             stack.push(CompilerAction::Compile { code, state });
 
@@ -349,7 +349,7 @@ pub fn compile_function(
 
                             stack.push(CompilerAction::EmitAsm { statements });
 
-                            let function_name = vec![function_object.clone()];
+                            let function_name = vec![function_object];
 
                             //Compile the arguments to the function
                             if !argv.is_empty() {
@@ -367,11 +367,11 @@ pub fn compile_function(
 
                             continue 'stack_loop;
                         }
-                        None => None,
+                        Err(err) => Err(err),
                     };
 
-                    let res = list_parsed.or_else(|| {
-                        expr.to_symbol().map(|ident_name| {
+                    let res = list_parsed_or_err.or_else(|expr| {
+                        expr.into_symbol().map(|ident_name| {
                             let ident_or_macro = function.lookup(&ident_name)?;
 
                             if let CompilerType::Runtime(ident) = ident_or_macro {
@@ -390,9 +390,9 @@ pub fn compile_function(
                     });
 
                     match res {
-                        Some(Err(err)) => return Err(err),
-                        Some(Ok(_)) => (),
-                        None => {
+                        Ok(Err(err)) => return Err(err),
+                        Ok(Ok(_)) => (),
+                        Err(expr) => {
                             if expr.is_improper_list() {
                                 return Err(CompilerError::SyntaxError);
                             }
@@ -438,7 +438,7 @@ pub fn compile_function(
                     state,
                 });
                 stack.push(CompilerAction::Compile {
-                    code: true_expr.into_iter(),
+                    code: vec![true_expr].into_iter(),
                     state,
                 });
                 current_code_block = Vec::new();
@@ -453,7 +453,7 @@ pub fn compile_function(
                     true_asm: current_code_block,
                 });
                 stack.push(CompilerAction::Compile {
-                    code: false_expr.into_iter(),
+                    code: vec![false_expr].into_iter(),
                     state,
                 });
                 current_code_block = Vec::new();
@@ -463,16 +463,17 @@ pub fn compile_function(
                 mut true_asm,
             } => {
                 let mut false_asm = current_code_block;
-                current_code_block = test_asm;
-                current_code_block.push(Statement {
-                    s_type: StatementType::BranchIfFalse,
-                    arg: true_asm.len() as u32 + 1,
-                });
-                current_code_block.append(&mut true_asm);
-                current_code_block.push(Statement {
+                true_asm.push(Statement {
                     s_type: StatementType::Branch,
                     arg: false_asm.len() as u32,
                 });
+                test_asm.push(Statement {
+                    s_type: StatementType::BranchIfFalse,
+                    arg: true_asm.len() as u32,
+                });
+
+                current_code_block = test_asm;
+                current_code_block.append(&mut true_asm);
                 current_code_block.append(&mut false_asm);
             }
         }

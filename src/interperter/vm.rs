@@ -128,6 +128,7 @@ pub fn run_vm(mut stack: Vec<StackFrame>) -> Result<SchemeType, RuntimeError> {
                 StatementType::Literal => arg_stack.push(function.literals[arg as usize].clone()),
                 StatementType::Call | StatementType::Tail => {
                     let statement_num = function.code.len() - code_iter.as_slice().len();
+                    //Grab the function to call as an extra argument on the arg_stack.
                     let mut drain = arg_stack.drain(arg_stack.len() - (arg as usize) - 1..);
                     let new_function = drain.next().unwrap();
                     let args = drain.collect::<Vec<_>>();
@@ -185,5 +186,7 @@ pub fn run_vm(mut stack: Vec<StackFrame>) -> Result<SchemeType, RuntimeError> {
             }
         }
     }
-    Ok(arg_stack.pop().unwrap())
+    let ret = Ok(arg_stack.pop().unwrap());
+    assert!(arg_stack.is_empty());
+    ret
 }

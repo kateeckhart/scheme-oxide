@@ -113,7 +113,9 @@ impl BuiltinFunction {
                     return Err(RuntimeError::ArgError);
                 }
 
-                args[0].to_pair()?.set_car(args[1].clone());
+                let object = args.pop().unwrap();
+
+                args[0].to_pair()?.set_car(object);
 
                 BuiltinFunction::GenUnspecified.call_with_stack(stack, Vec::new())
             }
@@ -122,7 +124,9 @@ impl BuiltinFunction {
                     return Err(RuntimeError::ArgError);
                 }
 
-                args[1].to_pair()?.set_cdr(args[1].clone());
+                let object = args.pop().unwrap();
+
+                args[0].to_pair()?.set_cdr(object);
 
                 BuiltinFunction::GenUnspecified.call_with_stack(stack, Vec::new())
             }
@@ -145,9 +149,8 @@ impl BuiltinFunction {
                     return Err(RuntimeError::ArgError);
                 }
 
-                let mut iter = args.iter();
-                let a = iter.next().unwrap().to_number()?;
-                let b = iter.next().unwrap().to_number()?;
+                let b = args.pop().unwrap().to_number()?;
+                let a = args.pop().unwrap().to_number()?;
 
                 if b == 0 {
                     return Err(RuntimeError::DivByZero);

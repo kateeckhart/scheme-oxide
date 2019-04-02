@@ -103,14 +103,6 @@ enum ListType {
 }
 
 impl ListType {
-    fn is_proper_list(&self) -> bool {
-        if let ListType::Proper = self {
-            true
-        } else {
-            false
-        }
-    }
-
     fn is_improper_list(&self) -> bool {
         if let ListType::Improper(_) = self {
             true
@@ -146,10 +138,6 @@ impl AstList {
             nodes: vec![node],
             list_type: ListType::Proper,
         }
-    }
-
-    pub fn is_proper_list(&self) -> bool {
-        self.list_type.is_proper_list()
     }
 
     pub fn is_improper_list(&self) -> bool {
@@ -325,22 +313,6 @@ impl AstNode {
             Some(sym.clone())
         } else {
             None
-        }
-    }
-
-    pub fn to_proper_list(&self) -> Option<Vec<AstNode>> {
-        if self.is_proper_list() {
-            self.clone().into_proper_list().ok()
-        } else {
-            None
-        }
-    }
-
-    pub fn is_proper_list(&self) -> bool {
-        if let Some(list) = self.as_list() {
-            list.is_proper_list()
-        } else {
-            false
         }
     }
 

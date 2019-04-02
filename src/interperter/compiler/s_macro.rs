@@ -183,8 +183,8 @@ impl BuiltinMacro {
 
                 Ok(vec![
                     CompilerAction::IfCompileTrue {
-                        true_expr: vec![true_expr],
-                        false_expr: vec![false_expr],
+                        true_expr,
+                        false_expr,
                         state,
                     },
                     CompilerAction::Compile {
@@ -400,7 +400,7 @@ impl BuiltinMacro {
                 let raw_borrowed_else_clase = args_iter.peek().unwrap();
                 if let Some(clase) = raw_borrowed_else_clase.as_proper_list() {
                     let else_symbol = AstSymbol::new("else");
-                    if clase.len() > 1
+                    if !clase.is_empty()
                         && clase[0] == else_symbol.clone().into()
                         && !function.is_bounded(&else_symbol)
                     {
