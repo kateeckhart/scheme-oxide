@@ -47,7 +47,7 @@ fn main() {
     };
 
     let file_name = if matches.free.len() == 1 {
-        matches.free[1].clone()
+        matches.free[0].clone()
     } else if matches.free.is_empty() {
         print_usage(&self_name);
         return;
