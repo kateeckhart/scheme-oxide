@@ -59,6 +59,7 @@ pub enum BuiltinMacro {
     Quote,
     //TODO: When syntax-rules is added, change into derived form.
     Let,
+    LetStar,
     Or,
     And,
     Cond,
@@ -337,6 +338,37 @@ impl BuiltinMacro {
                 };
 
                 compile_one(expr, state)
+            }
+            BuiltinMacro::LetStar => {
+                if args.len() < 2 {
+                    return Err(CompilerError::SyntaxError);
+                }
+
+                let definitons_or_err = args.remove(0).into_proper_list();
+
+                let mut definitions = if let Ok(def) = definitons_or_err {
+                    def
+                } else {
+                    return Err(CompilerError::SyntaxError);
+                };
+
+                if definitions.len() < 2 {
+                    let mut let_list = vec![CoreSymbol::Let.into(), definitions.into()];
+                    let_list.append(&mut args);
+
+                    return compile_one(let_list.into(), state);
+                }
+
+                let def_one = definitions.remove(0);
+
+                let mut let_list = vec![CoreSymbol::Let.into(), vec![def_one].into()];
+
+                let mut code = vec![CoreSymbol::LetStar.into(), definitions.into()];
+                code.append(&mut args);
+
+                let_list.append(&mut code);
+
+                compile_one(let_list.into(), state)
             }
             BuiltinMacro::And => {
                 let expr = if args.is_empty() {

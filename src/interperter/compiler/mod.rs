@@ -75,6 +75,14 @@ impl EnvironmentFrame {
             SchemeMacro::Builtin(BuiltinMacro::Let),
         );
         self.push_macro(
+            AstSymbol::new("let*"),
+            SchemeMacro::Builtin(BuiltinMacro::LetStar),
+        );
+        self.push_macro(
+            CoreSymbol::LetStar.into(),
+            SchemeMacro::Builtin(BuiltinMacro::LetStar),
+        );
+        self.push_macro(
             AstSymbol::new("begin"),
             SchemeMacro::Builtin(BuiltinMacro::Begin),
         );
