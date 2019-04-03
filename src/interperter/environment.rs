@@ -64,6 +64,7 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.frame.add_builtin_macros();
 
     ret.push_builtin_function(AstSymbol::new("+"), BuiltinFunction::Add);
+    ret.push_builtin_function(AstSymbol::new("*"), BuiltinFunction::Mul);
     ret.push_builtin_function(AstSymbol::new("-"), BuiltinFunction::Sub);
 
     ret.push_builtin_function(

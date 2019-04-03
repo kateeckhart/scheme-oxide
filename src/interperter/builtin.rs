@@ -25,6 +25,7 @@ use std::cmp::Ordering;
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum BuiltinFunction {
     Add,
+    Mul,
     Cons,
     Car,
     Cdr,
@@ -52,6 +53,13 @@ impl BuiltinFunction {
                     sum += num.to_number()?
                 }
                 Ok(Some(SchemeType::Number(sum)))
+            }
+            BuiltinFunction::Mul => {
+                let mut product = 0;
+                for num in args {
+                    product *= num.to_number()?
+                }
+                Ok(Some(SchemeType::Number(product)))
             }
             BuiltinFunction::Sub => {
                 if args.len() == 1 {
