@@ -66,6 +66,7 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_builtin_function(AstSymbol::new("+"), BuiltinFunction::Add);
     ret.push_builtin_function(AstSymbol::new("*"), BuiltinFunction::Mul);
     ret.push_builtin_function(AstSymbol::new("-"), BuiltinFunction::Sub);
+    ret.push_builtin_function(AstSymbol::new("$disp_num"), BuiltinFunction::DispNum);
 
     ret.push_builtin_function(
         AstSymbol::new("="),

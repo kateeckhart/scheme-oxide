@@ -38,6 +38,8 @@ pub enum BuiltinFunction {
     Quotient,
     Remainder,
     GenUnspecified,
+    //Temp functions
+    DispNum,
 }
 
 impl BuiltinFunction {
@@ -175,6 +177,16 @@ impl BuiltinFunction {
             }
 
             BuiltinFunction::GenUnspecified => Ok(Some(SchemeType::Bool(false))),
+            BuiltinFunction::DispNum => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArgError);;
+                }
+
+                let num = args.pop().unwrap().to_number()?;
+                println!("{}", num);
+
+                BuiltinFunction::GenUnspecified.call_with_stack(stack, Vec::new())
+            }
         }
     }
 }
