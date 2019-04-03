@@ -459,7 +459,7 @@ pub fn compile_function(
                 current_code_block = Vec::new();
             }
             CompilerAction::IfCompileDone {
-                test_asm,
+                mut test_asm,
                 mut true_asm,
             } => {
                 let mut false_asm = current_code_block;
