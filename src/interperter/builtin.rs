@@ -90,8 +90,11 @@ impl BuiltinFunction {
                     return Err(RuntimeError::ArgError);
                 }
 
+                let cdr = args.pop().unwrap();
+                let car = args.pop().unwrap();
+
                 Ok(Some(
-                    SchemePair::new(args.pop().unwrap(), args.pop().unwrap()).into(),
+                    SchemePair::new(car, cdr).into(),
                 ))
             }
             BuiltinFunction::Car => {
