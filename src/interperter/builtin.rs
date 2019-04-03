@@ -101,9 +101,7 @@ impl BuiltinFunction {
                 let cdr = args.pop().unwrap();
                 let car = args.pop().unwrap();
 
-                Ok(Some(
-                    SchemePair::new(car, cdr).into(),
-                ))
+                Ok(Some(SchemePair::new(car, cdr).into()))
             }
             BuiltinFunction::Car => {
                 if args.len() != 1 {

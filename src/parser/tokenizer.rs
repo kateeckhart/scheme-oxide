@@ -43,14 +43,13 @@ pub enum Token {
 }
 
 fn gen_regex() -> Regex {
-    let whitespace = "(?:[[:space:]])";
+    let comment = "(?:;.*)";
+    let whitespace = format!("(?:[[:space:]]|{})", comment);
 
-    //Mini function that returns a regex matching delimers/end of file
-    //Id is a prefix to the EndOfFile capture group
     let delimer = format!(r#"(?:{}|[()";]|$)"#, whitespace);
 
     let special_inital = "[!$%&*/:<=>?^_~]";
-    let special_subsequent = r"[+.@-]";
+    let special_subsequent = "[+.@-]";
     let inital = format!("(?:[[:alpha:]]|{})", special_inital);
     let subsequent = format!("(?:[0-9]|{}|{})", inital, special_subsequent);
     let normal_symbol = format!("(?:{}{}*)", inital, subsequent);
