@@ -366,7 +366,7 @@ impl BuiltinMacro {
                 let mut code = vec![CoreSymbol::LetStar.into(), definitions.into()];
                 code.append(&mut args);
 
-                let_list.append(&mut code);
+                let_list.push(code.into());
 
                 compile_one(let_list.into(), state)
             }
