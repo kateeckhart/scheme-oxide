@@ -83,12 +83,12 @@ impl BuiltinFunction {
                 }
                 let mut iter = args.drain(..);
                 let mut current = iter.next().unwrap().to_number()?;
-                let mut ret = SchemeType::Bool(true);
+                let mut ret = get_true();
                 for raw_num in iter {
                     let num = raw_num.to_number()?;
                     let res = current.cmp(&num);
                     if (res == mode) == invert {
-                        ret = SchemeType::Bool(false);
+                        ret = get_false();
                         break;
                     }
                     current = num;
@@ -146,14 +146,14 @@ impl BuiltinFunction {
                     return Err(RuntimeError::ArgError);
                 }
 
-                Ok(Some(SchemeType::Bool(args.pop().unwrap().is_pair())))
+                Ok(Some(args.pop().unwrap().is_pair().into()))
             }
             BuiltinFunction::Eqv => {
                 if args.len() != 2 {
                     return Err(RuntimeError::ArgError);
                 }
 
-                Ok(Some(SchemeType::Bool(args[0] == args[1])))
+                Ok(Some((args[0] == args[1]).into()))
             }
             BuiltinFunction::Quotient | BuiltinFunction::Remainder => {
                 if args.len() != 2 {
@@ -176,7 +176,7 @@ impl BuiltinFunction {
                 Ok(Some(SchemeType::Number(res)))
             }
 
-            BuiltinFunction::GenUnspecified => Ok(Some(SchemeType::Bool(false))),
+            BuiltinFunction::GenUnspecified => Ok(Some(get_false())),
             BuiltinFunction::DispNum => {
                 if args.len() != 1 {
                     return Err(RuntimeError::ArgError);;

@@ -267,7 +267,7 @@ impl AstNode {
 
                 builder.build_with_tail(list.list_type.to_datum()).into()
             }
-            AstNodeInner::Bool(boolean) => SchemeType::Bool(*boolean),
+            AstNodeInner::Bool(is_true) => (*is_true).into(),
         }
     }
 

@@ -23,12 +23,20 @@ use crate::interperter::FunctionRef;
 mod object;
 pub use self::object::SchemeObject;
 
-pub fn get_empty_list() -> SchemeType {
-    thread_local! {
-        static EMPTY_LIST: SchemeObject = SchemeObject::unique_new()
-    }
-    EMPTY_LIST.with(|lst| lst.clone().into())
+macro_rules! gen_singleton {
+    (pub $name:ident) => {
+        pub fn $name() -> SchemeType {
+            thread_local! {
+                static SINGLETON: SchemeObject = SchemeObject::unique_new()
+            }
+            SINGLETON.with(|s| s.clone().into())
+        }
+    };
 }
+
+gen_singleton!(pub get_empty_list);
+gen_singleton!(pub get_true);
+gen_singleton!(pub get_false);
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum SchemeType {
@@ -37,7 +45,6 @@ pub enum SchemeType {
     Pair(SchemePair),
     String(String),
     Symbol(String),
-    Bool(bool),
     Object(SchemeObject),
 }
 
@@ -62,10 +69,7 @@ impl SchemeType {
     }
 
     pub fn to_bool(&self) -> bool {
-        match self {
-            SchemeType::Bool(false) => false,
-            _ => true,
-        }
+        !(*self == get_false())
     }
 
     pub fn to_pair(&self) -> Result<SchemePair, CastError> {
@@ -107,5 +111,15 @@ impl From<FunctionRef> for SchemeType {
 impl From<SchemeObject> for SchemeType {
     fn from(object: SchemeObject) -> Self {
         SchemeType::Object(object)
+    }
+}
+
+impl From<bool> for SchemeType {
+    fn from(is_true: bool) -> Self {
+        if is_true {
+            get_true()
+        } else {
+            get_false()
+        }
     }
 }

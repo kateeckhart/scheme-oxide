@@ -51,7 +51,7 @@ impl SchemeObject {
     //Create an object with a unique address in memory.
     //For the purpose of creating type ids.
     pub fn unique_new() -> SchemeObject {
-        SchemeObject::new(SchemeType::Bool(false), 0, SchemeType::Bool(false))
+        SchemeObject::new(SchemeType::Number(0), 0, SchemeType::Number(0))
     }
 
     fn get_type_id(&self) -> SchemeType {
