@@ -36,7 +36,7 @@ impl SchemePair {
     }
 
     pub fn one(object: SchemeType) -> Self {
-        SchemePair::new(object, SchemeType::EmptyList)
+        SchemePair::new(object, get_empty_list())
     }
 
     pub fn get_car(&self) -> SchemeType {

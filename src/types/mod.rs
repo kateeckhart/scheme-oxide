@@ -20,16 +20,25 @@
 pub mod pair;
 pub use self::pair::SchemePair;
 use crate::interperter::FunctionRef;
+mod object;
+pub use self::object::SchemeObject;
+
+pub fn get_empty_list() -> SchemeType {
+    thread_local! {
+        static EMPTY_LIST: SchemeObject = SchemeObject::unique_new()
+    }
+    EMPTY_LIST.with(|lst| lst.clone().into())
+}
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum SchemeType {
-    Pair(SchemePair),
     Function(FunctionRef),
     Number(i64),
+    Pair(SchemePair),
     String(String),
     Symbol(String),
-    EmptyList,
     Bool(bool),
+    Object(SchemeObject),
 }
 
 #[derive(Clone, Debug)]
@@ -84,7 +93,7 @@ impl From<Option<SchemePair>> for SchemeType {
     fn from(pair: Option<SchemePair>) -> SchemeType {
         match pair {
             Some(x) => x.into(),
-            None => SchemeType::EmptyList,
+            None => get_empty_list(),
         }
     }
 }
@@ -92,5 +101,11 @@ impl From<Option<SchemePair>> for SchemeType {
 impl From<FunctionRef> for SchemeType {
     fn from(func: FunctionRef) -> Self {
         SchemeType::Function(func)
+    }
+}
+
+impl From<SchemeObject> for SchemeType {
+    fn from(object: SchemeObject) -> Self {
+        SchemeType::Object(object)
     }
 }

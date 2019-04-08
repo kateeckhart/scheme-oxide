@@ -64,7 +64,7 @@ fn add_three() {
 
 #[test]
 fn list_fun() {
-    assert_eq!(eval("(list)").unwrap(), SchemeType::EmptyList);
+    assert_eq!(eval("(list)").unwrap(), get_empty_list());
     assert_eq!(
         eval("(equal? (list 1 2 (list 3 4) 5 6) '(1 2 (3 4) 5 6))").unwrap(),
         SchemeType::Bool(true)
