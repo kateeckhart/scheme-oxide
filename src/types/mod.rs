@@ -25,16 +25,17 @@ pub use self::object::SchemeObject;
 
 macro_rules! gen_singleton {
     (pub $name:ident) => {
-        pub fn $name() -> SchemeType {
+        pub fn $name() -> SchemeObject {
             thread_local! {
                 static SINGLETON: SchemeObject = SchemeObject::unique_new()
             }
-            SINGLETON.with(|s| s.clone().into())
+            SINGLETON.with(|s| s.clone())
         }
     };
 }
 
 gen_singleton!(pub get_empty_list);
+gen_singleton!(pub get_pair_type_id);
 gen_singleton!(pub get_true);
 gen_singleton!(pub get_false);
 
@@ -42,7 +43,6 @@ gen_singleton!(pub get_false);
 pub enum SchemeType {
     Function(FunctionRef),
     Number(i64),
-    Pair(SchemePair),
     String(String),
     Symbol(String),
     Object(SchemeObject),
@@ -52,14 +52,6 @@ pub enum SchemeType {
 pub struct CastError;
 
 impl SchemeType {
-    pub fn is_pair(&self) -> bool {
-        if let SchemeType::Pair(_) = self {
-            true
-        } else {
-            false
-        }
-    }
-
     pub fn to_number(&self) -> Result<i64, CastError> {
         if let SchemeType::Number(num) = self {
             Ok(*num)
@@ -68,15 +60,33 @@ impl SchemeType {
         }
     }
 
-    pub fn to_bool(&self) -> bool {
-        !(*self == get_false())
+    pub fn to_index(&self) -> Result<usize, CastError> {
+        let raw_num = self.to_number()?;
+        //Indexes need to be positive
+        if raw_num < 0 {
+            return Err(CastError);
+        }
+        let num = raw_num as u64;
+
+        //On 32-bit platforms make sure that the index does not overflow.
+        //Should be optimized to a no-op on 64-bit platforms.
+        if num > (usize::max_value() as u64) {
+            Err(CastError)
+        } else {
+            Ok(num as usize)
+        }
     }
 
-    pub fn to_pair(&self) -> Result<SchemePair, CastError> {
-        Ok(match self {
-            SchemeType::Pair(ret) => ret.clone(),
-            _ => return Err(CastError),
-        })
+    pub fn into_object(self) -> Result<SchemeObject, CastError> {
+        if let SchemeType::Object(obj) = self {
+            Ok(obj)
+        } else {
+            Err(CastError)
+        }
+    }
+
+    pub fn to_bool(&self) -> bool {
+        !(*self == get_false().into())
     }
 
     pub fn to_function(&self) -> Result<FunctionRef, CastError> {
@@ -88,8 +98,8 @@ impl SchemeType {
 }
 
 impl From<SchemePair> for SchemeType {
-    fn from(pair: SchemePair) -> SchemeType {
-        SchemeType::Pair(pair)
+    fn from(pair: SchemePair) -> Self {
+        pair.into_object().into()
     }
 }
 
@@ -97,7 +107,7 @@ impl From<Option<SchemePair>> for SchemeType {
     fn from(pair: Option<SchemePair>) -> SchemeType {
         match pair {
             Some(x) => x.into(),
-            None => get_empty_list(),
+            None => get_empty_list().into(),
         }
     }
 }
@@ -117,9 +127,9 @@ impl From<SchemeObject> for SchemeType {
 impl From<bool> for SchemeType {
     fn from(is_true: bool) -> Self {
         if is_true {
-            get_true()
+            get_true().into()
         } else {
-            get_false()
+            get_false().into()
         }
     }
 }

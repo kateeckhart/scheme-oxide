@@ -66,6 +66,8 @@ pub fn eval(string: &str) -> Result<SchemeType, RuntimeError> {
 
 #[derive(Debug)]
 pub enum RuntimeError {
+    AssertFailed,
+    OutOfBounds,
     DivByZero,
     TypeError,
     EvalError(CompilerError),

@@ -26,26 +26,30 @@ use std::cmp::Ordering;
 pub enum BuiltinFunction {
     Add,
     Mul,
-    Cons,
-    Car,
-    Cdr,
-    SetCar,
-    SetCdr,
-    IsPair,
     Sub,
     Compare { invert: bool, mode: Ordering },
     Eqv,
     Quotient,
     Remainder,
     GenUnspecified,
+    Error,
+    IsObject,
+    GetTypeId,
+    GetField,
+    SetField,
+    NewObject,
     //Temp functions
     DispNum,
+}
+
+fn gen_unspecified() -> SchemeType {
+    get_false().into()
 }
 
 impl BuiltinFunction {
     pub fn call_with_stack(
         self,
-        stack: &mut Vec<StackFrame>,
+        _stack: &mut Vec<StackFrame>,
         mut args: Vec<SchemeType>,
     ) -> Result<Option<SchemeType>, RuntimeError> {
         match self {
@@ -93,60 +97,7 @@ impl BuiltinFunction {
                     }
                     current = num;
                 }
-                Ok(Some(ret))
-            }
-            BuiltinFunction::Cons => {
-                if args.len() != 2 {
-                    return Err(RuntimeError::ArgError);
-                }
-
-                let cdr = args.pop().unwrap();
-                let car = args.pop().unwrap();
-
-                Ok(Some(SchemePair::new(car, cdr).into()))
-            }
-            BuiltinFunction::Car => {
-                if args.len() != 1 {
-                    return Err(RuntimeError::ArgError);
-                }
-
-                Ok(Some(args[0].to_pair()?.get_car()))
-            }
-            BuiltinFunction::Cdr => {
-                if args.len() != 1 {
-                    return Err(RuntimeError::ArgError);
-                }
-
-                Ok(Some(args[0].to_pair()?.get_cdr()))
-            }
-            BuiltinFunction::SetCar => {
-                if args.len() != 2 {
-                    return Err(RuntimeError::ArgError);
-                }
-
-                let object = args.pop().unwrap();
-
-                args[0].to_pair()?.set_car(object);
-
-                BuiltinFunction::GenUnspecified.call_with_stack(stack, Vec::new())
-            }
-            BuiltinFunction::SetCdr => {
-                if args.len() != 2 {
-                    return Err(RuntimeError::ArgError);
-                }
-
-                let object = args.pop().unwrap();
-
-                args[0].to_pair()?.set_cdr(object);
-
-                BuiltinFunction::GenUnspecified.call_with_stack(stack, Vec::new())
-            }
-            BuiltinFunction::IsPair => {
-                if args.len() != 1 {
-                    return Err(RuntimeError::ArgError);
-                }
-
-                Ok(Some(args.pop().unwrap().is_pair().into()))
+                Ok(Some(ret.into()))
             }
             BuiltinFunction::Eqv => {
                 if args.len() != 2 {
@@ -176,7 +127,66 @@ impl BuiltinFunction {
                 Ok(Some(SchemeType::Number(res)))
             }
 
-            BuiltinFunction::GenUnspecified => Ok(Some(get_false())),
+            BuiltinFunction::GenUnspecified => Ok(Some(gen_unspecified())),
+            BuiltinFunction::Error => Err(RuntimeError::AssertFailed),
+            BuiltinFunction::IsObject => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                let object = args.pop().unwrap();
+                Ok(Some(
+                    if let SchemeType::Object(_) = object {
+                        true
+                    } else {
+                        false
+                    }
+                    .into(),
+                ))
+            }
+            BuiltinFunction::GetTypeId => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                let object = args.pop().unwrap().into_object()?;
+                Ok(Some(object.get_type_id()))
+            }
+            BuiltinFunction::GetField => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                let index = args.pop().unwrap().to_index()?;
+                let object = args.pop().unwrap().into_object()?;
+
+                object
+                    .get_field(index)
+                    .ok_or(RuntimeError::OutOfBounds)
+                    .map(Some)
+            }
+            BuiltinFunction::SetField => {
+                if args.len() != 3 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                let field_value = args.pop().unwrap();
+                let index = args.pop().unwrap().to_index()?;
+                let object = args.pop().unwrap().into_object()?;
+
+                object
+                    .set_field(index, field_value)
+                    .map(|_| Some(gen_unspecified()))
+                    .map_err(|_| RuntimeError::OutOfBounds)
+            }
+            BuiltinFunction::NewObject => {
+                if args.is_empty() {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                let type_id = args.remove(0);
+                Ok(Some(SchemeObject::new(type_id, args).into()))
+            }
             BuiltinFunction::DispNum => {
                 if args.len() != 1 {
                     return Err(RuntimeError::ArgError);;
@@ -185,7 +195,7 @@ impl BuiltinFunction {
                 let num = args.pop().unwrap().to_number()?;
                 println!("{}", num);
 
-                BuiltinFunction::GenUnspecified.call_with_stack(stack, Vec::new())
+                Ok(Some(gen_unspecified()))
             }
         }
     }

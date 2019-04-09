@@ -18,43 +18,25 @@
 */
 
 use crate::types::*;
-use std::cell::RefCell;
-use std::rc::Rc;
 
-#[derive(Clone, Debug)]
-pub struct SchemePair(Rc<RefCell<(SchemeType, SchemeType)>>);
-
-impl PartialEq for SchemePair {
-    fn eq(&self, other: &SchemePair) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
-    }
-}
+#[derive(Clone, Debug, PartialEq)]
+pub struct SchemePair(SchemeObject);
 
 impl SchemePair {
     pub fn new(one: SchemeType, two: SchemeType) -> Self {
-        SchemePair(Rc::new(RefCell::new((one, two))))
+        SchemePair(SchemeObject::new(get_pair_type_id().into(), vec![one, two]))
     }
 
     pub fn one(object: SchemeType) -> Self {
-        SchemePair::new(object, get_empty_list())
-    }
-
-    pub fn get_car(&self) -> SchemeType {
-        self.0.borrow().0.clone()
-    }
-
-    pub fn get_cdr(&self) -> SchemeType {
-        self.0.borrow().1.clone()
-    }
-
-    pub fn set_car(&self, car: SchemeType) {
-        let mut self_ref = self.0.borrow_mut();
-        self_ref.0 = car;
+        SchemePair::new(object, get_empty_list().into())
     }
 
     pub fn set_cdr(&self, cdr: SchemeType) {
-        let mut self_ref = self.0.borrow_mut();
-        self_ref.1 = cdr;
+        self.0.set_field(1, cdr).unwrap()
+    }
+
+    pub fn into_object(self) -> SchemeObject {
+        self.0
     }
 }
 

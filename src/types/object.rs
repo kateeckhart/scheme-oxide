@@ -31,17 +31,7 @@ struct SchemeObjectInner {
 }
 
 impl SchemeObject {
-    fn new(type_id: SchemeType, size: usize, fill: SchemeType) -> SchemeObject {
-        let mut fields = Vec::with_capacity(size);
-
-        if size != 0 {
-            for _ in 0..size - 1 {
-                fields.push(fill.clone())
-            }
-
-            fields.push(fill)
-        }
-
+    pub fn new(type_id: SchemeType, fields: Vec<SchemeType>) -> SchemeObject {
         SchemeObject(Rc::new(RefCell::new(SchemeObjectInner {
             type_id,
             fields: fields.into_boxed_slice(),
@@ -51,15 +41,25 @@ impl SchemeObject {
     //Create an object with a unique address in memory.
     //For the purpose of creating type ids.
     pub fn unique_new() -> SchemeObject {
-        SchemeObject::new(SchemeType::Number(0), 0, SchemeType::Number(0))
+        SchemeObject::new(SchemeType::Number(0), Vec::new())
     }
 
-    fn get_type_id(&self) -> SchemeType {
+    pub fn get_type_id(&self) -> SchemeType {
         self.0.borrow().type_id.clone()
     }
 
-    fn get_field(&self, index: usize) -> Option<SchemeType> {
+    pub fn get_field(&self, index: usize) -> Option<SchemeType> {
         self.0.borrow().fields.get(index).cloned()
+    }
+
+    //Error if index is out of bounds.
+    pub fn set_field(&self, index: usize, object: SchemeType) -> Result<(), ()> {
+        self.0
+            .borrow_mut()
+            .fields
+            .get_mut(index)
+            .map(|old_object| *old_object = object)
+            .ok_or(())
     }
 }
 

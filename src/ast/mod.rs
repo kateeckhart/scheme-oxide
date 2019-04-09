@@ -115,7 +115,7 @@ impl ListType {
 
     fn to_datum(&self) -> SchemeType {
         match self {
-            ListType::Proper => get_empty_list(),
+            ListType::Proper => get_empty_list().into(),
             ListType::Improper(node) => node.to_datum(),
         }
     }

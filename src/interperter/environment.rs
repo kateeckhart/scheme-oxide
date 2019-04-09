@@ -103,16 +103,21 @@ fn gen_scheme_environment() -> BaseEnvironment {
             mode: Ordering::Less,
         },
     );
-    ret.push_builtin_function(AstSymbol::new("car"), BuiltinFunction::Car);
-    ret.push_builtin_function(AstSymbol::new("set_car!"), BuiltinFunction::SetCar);
-    ret.push_builtin_function(AstSymbol::new("set_cdr!"), BuiltinFunction::SetCdr);
-    ret.push_builtin_function(AstSymbol::new("cdr"), BuiltinFunction::Cdr);
-    ret.push_builtin_function(AstSymbol::new("cons"), BuiltinFunction::Cons);
-    ret.push_builtin_function(AstSymbol::new("pair?"), BuiltinFunction::IsPair);
+    ret.push_builtin_function(AstSymbol::new("$object"), BuiltinFunction::NewObject);
+    ret.push_builtin_function(AstSymbol::new("$object?"), BuiltinFunction::IsObject);
+    ret.push_builtin_function(
+        AstSymbol::new("$object_type_id"),
+        BuiltinFunction::GetTypeId,
+    );
+    ret.push_builtin_function(AstSymbol::new("$object_field"), BuiltinFunction::GetField);
+    ret.push_builtin_function(AstSymbol::new("$object_field!"), BuiltinFunction::SetField);
+
+    ret.push_object(AstSymbol::new("$pair_type_id"), get_pair_type_id().into());
 
     ret.push_builtin_function(AstSymbol::new("eqv?"), BuiltinFunction::Eqv);
     ret.push_builtin_function(AstSymbol::new("quotient"), BuiltinFunction::Quotient);
     ret.push_builtin_function(AstSymbol::new("remainder"), BuiltinFunction::Remainder);
+    ret.push_builtin_function(AstSymbol::new("error"), BuiltinFunction::Error);
 
     ret.push_builtin_function(
         CoreSymbol::GenUnspecified.into(),
@@ -127,14 +132,6 @@ fn gen_scheme_environment() -> BaseEnvironment {
         .unwrap();
     ret.push_eval(AstSymbol::new("null?"), "(lambda (x) (eqv? x '()))")
         .unwrap();
-    ret.push_eval(AstSymbol::new("equal?"), "
-        (lambda (x y)
-            (let equal? ((x x) (y y))
-                (cond
-                    ((and (pair? x) (pair? y)) (and (equal? (car x) (car y)) (equal? (cdr x) (cdr y))))
-                    (else (eqv? x y))))
-        )").unwrap();
-
     ret.push_eval(AstSymbol::new("not"), "(lambda (x) (if x #f #t))")
         .unwrap();
     ret.push_eval(
@@ -157,6 +154,50 @@ fn gen_scheme_environment() -> BaseEnvironment {
     .unwrap();
     ret.push_eval(AstSymbol::new("list"), "(lambda list list)")
         .unwrap();
+
+    ret.push_eval(
+        AstSymbol::new("pair?"),
+        "(lambda (x) (and ($object? x) (eqv? ($object_type_id x) $pair_type_id)))",
+    )
+    .unwrap();
+    ret.push_eval(
+        AstSymbol::new("$assert_pair"),
+        r#"(lambda (name x) (if (not (pair? x)) (error name "Not a pair. x")))"#,
+    )
+    .unwrap();
+    ret.push_eval(
+        AstSymbol::new("car"),
+        "(lambda (x) ($assert_pair 'car x) ($object_field x 0))",
+    )
+    .unwrap();
+    ret.push_eval(
+        AstSymbol::new("cdr"),
+        "(lambda (x) ($assert_pair 'cdr x) ($object_field x 1))",
+    )
+    .unwrap();
+    ret.push_eval(
+        AstSymbol::new("set_car!"),
+        "(lambda (x y) ($assert_pair 'set_car! x) ($object_field! x 0 y))",
+    )
+    .unwrap();
+    ret.push_eval(
+        AstSymbol::new("set_cdr!"),
+        "(lambda (x y) ($assert_pair 'set_cdr! x) ($object_field! x 1 y))",
+    )
+    .unwrap();
+    ret.push_eval(
+        AstSymbol::new("cons"),
+        "(lambda (x y) ($object $pair_type_id x y))",
+    )
+    .unwrap();
+
+    ret.push_eval(AstSymbol::new("equal?"), "
+        (lambda (x y)
+            (let equal? ((x x) (y y))
+                (cond
+                    ((and (pair? x) (pair? y)) (and (equal? (car x) (car y)) (equal? (cdr x) (cdr y))))
+                    (else (eqv? x y))))
+        )").unwrap();
 
     ret
 }
