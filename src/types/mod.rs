@@ -17,6 +17,8 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 pub mod pair;
 pub use self::pair::SchemePair;
 use crate::interperter::FunctionRef;
@@ -38,13 +40,30 @@ gen_singleton!(pub get_empty_list);
 gen_singleton!(pub get_pair_type_id);
 gen_singleton!(pub get_true);
 gen_singleton!(pub get_false);
+gen_singleton!(pub get_symbol_type_id);
+
+pub fn new_symbol(name: String) -> SchemeObject {
+    thread_local! {
+        static NAME_TO_SYM_MAP: RefCell<HashMap<String, SchemeObject>> = RefCell::new(HashMap::new())
+    }
+
+    NAME_TO_SYM_MAP.with(|raw_sym_map| {
+        let mut sym_map = raw_sym_map.borrow_mut();
+
+        sym_map
+            .entry(name.clone())
+            .or_insert_with(|| {
+                SchemeObject::new(get_symbol_type_id().into(), vec![SchemeType::String(name)])
+            })
+            .clone()
+    })
+}
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum SchemeType {
     Function(FunctionRef),
     Number(i64),
     String(String),
-    Symbol(String),
     Object(SchemeObject),
 }
 

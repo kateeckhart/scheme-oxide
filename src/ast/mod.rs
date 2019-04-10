@@ -256,7 +256,7 @@ impl AstNode {
     pub fn to_datum(&self) -> SchemeType {
         match &self.0 {
             AstNodeInner::Number(x) => SchemeType::Number(*x),
-            AstNodeInner::Symbol(sym) => SchemeType::Symbol(sym.get_name()),
+            AstNodeInner::Symbol(sym) => new_symbol(sym.get_name()).into(),
             AstNodeInner::String(stri) => SchemeType::String(stri.clone()),
             AstNodeInner::List(list) => {
                 let mut builder = ListFactory::new();
