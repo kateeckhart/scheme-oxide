@@ -66,7 +66,7 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_builtin_function(AstSymbol::new("+"), BuiltinFunction::Add);
     ret.push_builtin_function(AstSymbol::new("*"), BuiltinFunction::Mul);
     ret.push_builtin_function(AstSymbol::new("-"), BuiltinFunction::Sub);
-    ret.push_builtin_function(AstSymbol::new("$disp_num"), BuiltinFunction::DispNum);
+    ret.push_builtin_function(AstSymbol::new("$disp-num"), BuiltinFunction::DispNum);
 
     ret.push_builtin_function(
         AstSymbol::new("="),
@@ -106,11 +106,11 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_builtin_function(AstSymbol::new("$object"), BuiltinFunction::NewObject);
     ret.push_builtin_function(AstSymbol::new("$object?"), BuiltinFunction::IsObject);
     ret.push_builtin_function(
-        AstSymbol::new("$object_type_id"),
+        AstSymbol::new("$object-type-id"),
         BuiltinFunction::GetTypeId,
     );
-    ret.push_builtin_function(AstSymbol::new("$object_field"), BuiltinFunction::GetField);
-    ret.push_builtin_function(AstSymbol::new("$object_field!"), BuiltinFunction::SetField);
+    ret.push_builtin_function(AstSymbol::new("$object-field"), BuiltinFunction::GetField);
+    ret.push_builtin_function(AstSymbol::new("$object-field!"), BuiltinFunction::SetField);
 
     ret.push_builtin_function(AstSymbol::new("eqv?"), BuiltinFunction::Eqv);
     ret.push_builtin_function(AstSymbol::new("quotient"), BuiltinFunction::Quotient);
@@ -122,7 +122,7 @@ fn gen_scheme_environment() -> BaseEnvironment {
         BuiltinFunction::GenUnspecified,
     );
     ret.push_builtin_function(
-        AstSymbol::new("$gen_unspecified"),
+        AstSymbol::new("$gen-unspecified"),
         BuiltinFunction::GenUnspecified,
     );
 
@@ -154,57 +154,57 @@ fn gen_scheme_environment() -> BaseEnvironment {
         .unwrap();
 
     ret.push_object(
-        AstSymbol::new("$immutable_pair_type_id"),
+        AstSymbol::new("$immutable-pair-type-id"),
         get_immutable_pair_type_id().into(),
     );
     ret.push_object(
-        AstSymbol::new("$mutable_pair_type_id"),
+        AstSymbol::new("$mutable-pair-type-id"),
         get_mutable_pair_type_id().into(),
     );
 
     ret.push_eval(
-        AstSymbol::new("$mutable_pair?"),
-        "(lambda (x) (and ($object x) (eqv? ($object_type_id x) $mutable_pair_type_id)))",
+        AstSymbol::new("$mutable-pair?"),
+        "(lambda (x) (and ($object x) (eqv? ($object-type-id x) $mutable-pair-type-id)))",
     )
     .unwrap();
     ret.push_eval(
         AstSymbol::new("pair?"),
-        "(lambda (x) (and ($object? x) (or (eqv? ($object_type_id x) $immutable_pair_type_id) ($mutable_pair? x))))",
+        "(lambda (x) (and ($object? x) (or (eqv? ($object-type-id x) $immutable-pair-type-id) ($mutable-pair? x))))",
     )
     .unwrap();
     ret.push_eval(
-        AstSymbol::new("$assert_pair"),
+        AstSymbol::new("$assert-pair"),
         r#"(lambda (name x) (if (not (pair? x)) (error name "Not a pair." x)))"#,
     )
     .unwrap();
     ret.push_eval(
-        AstSymbol::new("$assert_mutable_pair"),
-        r#"(lambda (name x) (if (not ($mutable_pair? x)) (error name "Not an mutable pair." x)))"#,
+        AstSymbol::new("$assert-mutable-pair"),
+        r#"(lambda (name x) (if (not ($mutable-pair? x)) (error name "Not an mutable pair." x)))"#,
     )
     .unwrap();
     ret.push_eval(
         AstSymbol::new("car"),
-        "(lambda (x) ($assert_pair 'car x) ($object_field x 0))",
+        "(lambda (x) ($assert-pair 'car x) ($object-field x 0))",
     )
     .unwrap();
     ret.push_eval(
         AstSymbol::new("cdr"),
-        "(lambda (x) ($assert_pair 'cdr x) ($object_field x 1))",
+        "(lambda (x) ($assert-pair 'cdr x) ($object-field x 1))",
     )
     .unwrap();
     ret.push_eval(
-        AstSymbol::new("set_car!"),
-        "(lambda (x y) ($assert_mutable_pair 'set_car! x) ($object_field! x 0 y))",
+        AstSymbol::new("set-car!"),
+        "(lambda (x y) ($assert-mutable-pair 'set-car! x) ($object-field! x 0 y))",
     )
     .unwrap();
     ret.push_eval(
-        AstSymbol::new("set_cdr!"),
-        "(lambda (x y) ($assert_mutable_pair 'set_cdr! x) ($object_field! x 1 y))",
+        AstSymbol::new("set-cdr!"),
+        "(lambda (x y) ($assert-mutable-pair 'set-cdr! x) ($object-field! x 1 y))",
     )
     .unwrap();
     ret.push_eval(
         AstSymbol::new("cons"),
-        "(lambda (x y) ($object $mutable_pair_type_id x y))",
+        "(lambda (x y) ($object $mutable-pair-type-id x y))",
     )
     .unwrap();
 
