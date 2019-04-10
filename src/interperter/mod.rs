@@ -175,7 +175,7 @@ impl DerivedFunctionRef {
         }
 
         if self.function.is_vargs() {
-            let mut extra_params = ListFactory::new();
+            let mut extra_params = ListFactory::new(true);
             for extra_param in args {
                 extra_params.push(extra_param)
             }

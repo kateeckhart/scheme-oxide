@@ -259,7 +259,7 @@ impl AstNode {
             AstNodeInner::Symbol(sym) => new_symbol(sym.get_name()).into(),
             AstNodeInner::String(stri) => SchemeType::String(stri.clone()),
             AstNodeInner::List(list) => {
-                let mut builder = ListFactory::new();
+                let mut builder = ListFactory::new(false);
 
                 for node in list.nodes.iter() {
                     builder.push(node.to_datum())

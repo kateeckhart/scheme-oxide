@@ -37,7 +37,8 @@ macro_rules! gen_singleton {
 }
 
 gen_singleton!(pub get_empty_list);
-gen_singleton!(pub get_pair_type_id);
+gen_singleton!(pub get_immutable_pair_type_id);
+gen_singleton!(pub get_mutable_pair_type_id);
 gen_singleton!(pub get_true);
 gen_singleton!(pub get_false);
 gen_singleton!(pub get_symbol_type_id);

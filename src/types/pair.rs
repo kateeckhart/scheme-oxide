@@ -23,12 +23,17 @@ use crate::types::*;
 pub struct SchemePair(SchemeObject);
 
 impl SchemePair {
-    pub fn new(one: SchemeType, two: SchemeType) -> Self {
-        SchemePair(SchemeObject::new(get_pair_type_id().into(), vec![one, two]))
+    pub fn new(mutable: bool, one: SchemeType, two: SchemeType) -> Self {
+        let type_id = if mutable {
+            get_mutable_pair_type_id()
+        } else {
+            get_immutable_pair_type_id()
+        };
+        SchemePair(SchemeObject::new(type_id.into(), vec![one, two]))
     }
 
-    pub fn one(object: SchemeType) -> Self {
-        SchemePair::new(object, get_empty_list().into())
+    pub fn one(mutable: bool, object: SchemeType) -> Self {
+        SchemePair::new(mutable, object, get_empty_list().into())
     }
 
     pub fn set_cdr(&self, cdr: SchemeType) {
@@ -42,17 +47,22 @@ impl SchemePair {
 
 #[derive(Default, Clone, Debug)]
 pub struct ListFactory {
+    mutable: bool,
     head: Option<SchemePair>,
     tail: Option<SchemePair>,
 }
 
 impl ListFactory {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(mutable: bool) -> Self {
+        Self {
+            mutable,
+            head: None,
+            tail: None,
+        }
     }
 
     pub fn push(&mut self, object: SchemeType) {
-        let new_tail = SchemePair::one(object);
+        let new_tail = SchemePair::one(self.mutable, object);
         if let Some(ref tail) = self.tail {
             tail.set_cdr(new_tail.clone().into());
         } else {

@@ -112,8 +112,6 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_builtin_function(AstSymbol::new("$object_field"), BuiltinFunction::GetField);
     ret.push_builtin_function(AstSymbol::new("$object_field!"), BuiltinFunction::SetField);
 
-    ret.push_object(AstSymbol::new("$pair_type_id"), get_pair_type_id().into());
-
     ret.push_builtin_function(AstSymbol::new("eqv?"), BuiltinFunction::Eqv);
     ret.push_builtin_function(AstSymbol::new("quotient"), BuiltinFunction::Quotient);
     ret.push_builtin_function(AstSymbol::new("remainder"), BuiltinFunction::Remainder);
@@ -155,14 +153,33 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_eval(AstSymbol::new("list"), "(lambda list list)")
         .unwrap();
 
+    ret.push_object(
+        AstSymbol::new("$immutable_pair_type_id"),
+        get_immutable_pair_type_id().into(),
+    );
+    ret.push_object(
+        AstSymbol::new("$mutable_pair_type_id"),
+        get_mutable_pair_type_id().into(),
+    );
+
+    ret.push_eval(
+        AstSymbol::new("$mutable_pair?"),
+        "(lambda (x) (and ($object x) (eqv? ($object_type_id x) $mutable_pair_type_id)))",
+    )
+    .unwrap();
     ret.push_eval(
         AstSymbol::new("pair?"),
-        "(lambda (x) (and ($object? x) (eqv? ($object_type_id x) $pair_type_id)))",
+        "(lambda (x) (and ($object? x) (or (eqv? ($object_type_id x) $immutable_pair_type_id) ($mutable_pair? x))))",
     )
     .unwrap();
     ret.push_eval(
         AstSymbol::new("$assert_pair"),
-        r#"(lambda (name x) (if (not (pair? x)) (error name "Not a pair. x")))"#,
+        r#"(lambda (name x) (if (not (pair? x)) (error name "Not a pair." x)))"#,
+    )
+    .unwrap();
+    ret.push_eval(
+        AstSymbol::new("$assert_mutable_pair"),
+        r#"(lambda (name x) (if (not ($mutable_pair? x)) (error name "Not an mutable pair." x)))"#,
     )
     .unwrap();
     ret.push_eval(
@@ -177,17 +194,17 @@ fn gen_scheme_environment() -> BaseEnvironment {
     .unwrap();
     ret.push_eval(
         AstSymbol::new("set_car!"),
-        "(lambda (x y) ($assert_pair 'set_car! x) ($object_field! x 0 y))",
+        "(lambda (x y) ($assert_mutable_pair 'set_car! x) ($object_field! x 0 y))",
     )
     .unwrap();
     ret.push_eval(
         AstSymbol::new("set_cdr!"),
-        "(lambda (x y) ($assert_pair 'set_cdr! x) ($object_field! x 1 y))",
+        "(lambda (x y) ($assert_mutable_pair 'set_cdr! x) ($object_field! x 1 y))",
     )
     .unwrap();
     ret.push_eval(
         AstSymbol::new("cons"),
-        "(lambda (x y) ($object $pair_type_id x y))",
+        "(lambda (x y) ($object $mutable_pair_type_id x y))",
     )
     .unwrap();
 
