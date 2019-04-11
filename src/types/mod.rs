@@ -24,6 +24,9 @@ pub use self::pair::SchemePair;
 use crate::interperter::FunctionRef;
 mod object;
 pub use self::object::SchemeObject;
+mod string;
+pub use self::string::SchemeString;
+pub use self::string::StringSetError;
 
 macro_rules! gen_singleton {
     (pub $name:ident) => {
@@ -54,7 +57,10 @@ pub fn new_symbol(name: String) -> SchemeObject {
         sym_map
             .entry(name.clone())
             .or_insert_with(|| {
-                SchemeObject::new(get_symbol_type_id().into(), vec![SchemeType::String(name)])
+                SchemeObject::new(
+                    get_symbol_type_id().into(),
+                    vec![SchemeType::String(name.parse().unwrap())],
+                )
             })
             .clone()
     })
@@ -64,7 +70,8 @@ pub fn new_symbol(name: String) -> SchemeObject {
 pub enum SchemeType {
     Function(FunctionRef),
     Number(i64),
-    String(String),
+    Char(char),
+    String(SchemeString),
     Object(SchemeObject),
 }
 
@@ -100,6 +107,14 @@ impl SchemeType {
     pub fn into_object(self) -> Result<SchemeObject, CastError> {
         if let SchemeType::Object(obj) = self {
             Ok(obj)
+        } else {
+            Err(CastError)
+        }
+    }
+
+    pub fn into_string(self) -> Result<SchemeString, CastError> {
+        if let SchemeType::String(stri) = self {
+            Ok(stri)
         } else {
             Err(CastError)
         }

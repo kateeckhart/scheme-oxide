@@ -34,12 +34,14 @@ pub enum BuiltinFunction {
     GenUnspecified,
     Error,
     IsObject,
+    IsNumber,
+    IsChar,
+    IsString,
     GetTypeId,
     GetField,
     SetField,
     NewObject,
-    //Temp functions
-    DispNum,
+    GetChar,
 }
 
 fn gen_unspecified() -> SchemeType {
@@ -144,6 +146,51 @@ impl BuiltinFunction {
                     .into(),
                 ))
             }
+            BuiltinFunction::IsNumber => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                let object = args.pop().unwrap();
+                Ok(Some(
+                    if let SchemeType::Number(_) = object {
+                        true
+                    } else {
+                        false
+                    }
+                    .into(),
+                ))
+            }
+            BuiltinFunction::IsChar => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                let object = args.pop().unwrap();
+                Ok(Some(
+                    if let SchemeType::Char(_) = object {
+                        true
+                    } else {
+                        false
+                    }
+                    .into(),
+                ))
+            }
+            BuiltinFunction::IsString => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                let object = args.pop().unwrap();
+                Ok(Some(
+                    if let SchemeType::String(_) = object {
+                        true
+                    } else {
+                        false
+                    }
+                    .into(),
+                ))
+            }
             BuiltinFunction::GetTypeId => {
                 if args.len() != 1 {
                     return Err(RuntimeError::ArgError);
@@ -187,15 +234,18 @@ impl BuiltinFunction {
                 let type_id = args.remove(0);
                 Ok(Some(SchemeObject::new(type_id, args).into()))
             }
-            BuiltinFunction::DispNum => {
-                if args.len() != 1 {
-                    return Err(RuntimeError::ArgError);;
+            BuiltinFunction::GetChar => {
+                if args.len() != 2 {
+                    return Err(RuntimeError::ArgError);
                 }
 
-                let num = args.pop().unwrap().to_number()?;
-                println!("{}", num);
+                let index = args.pop().unwrap().to_index()?;
+                let string = args.pop().unwrap().into_string()?;
 
-                Ok(Some(gen_unspecified()))
+                string
+                    .get(index)
+                    .ok_or(RuntimeError::OutOfBounds)
+                    .map(|c| Some(SchemeType::Char(c)))
             }
         }
     }

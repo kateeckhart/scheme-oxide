@@ -257,7 +257,7 @@ impl AstNode {
         match &self.0 {
             AstNodeInner::Number(x) => SchemeType::Number(*x),
             AstNodeInner::Symbol(sym) => new_symbol(sym.get_name()).into(),
-            AstNodeInner::String(stri) => SchemeType::String(stri.clone()),
+            AstNodeInner::String(stri) => SchemeType::String(stri.clone().parse().unwrap()),
             AstNodeInner::List(list) => {
                 let mut builder = ListFactory::new(false);
 
