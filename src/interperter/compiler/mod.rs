@@ -25,7 +25,7 @@ use std::ops::{Deref, DerefMut};
 use std::vec;
 
 mod s_macro;
-use self::s_macro::{BuiltinMacro, SchemeMacro};
+use self::s_macro::BuiltinMacro;
 
 #[derive(Clone)]
 pub struct EnvironmentFrame {
@@ -46,83 +46,36 @@ impl EnvironmentFrame {
     }
 
     pub fn new_object(&mut self, name: AstSymbol) -> u32 {
-        self.map.insert(name, CompilerType::Runtime(self.next_id));
+        self.map
+            .insert(name, CompilerType::RuntimeLocation(self.next_id));
         let id = self.next_id;
         self.next_id += 1;
         id
     }
 
     pub fn add_builtin_macros(&mut self) {
-        self.push_macro(
-            AstSymbol::new("lambda"),
-            SchemeMacro::Builtin(BuiltinMacro::Lambda),
-        );
-        self.push_macro(
-            CoreSymbol::Lambda.into(),
-            SchemeMacro::Builtin(BuiltinMacro::Lambda),
-        );
-        self.push_macro(AstSymbol::new("if"), SchemeMacro::Builtin(BuiltinMacro::If));
-        self.push_macro(
-            CoreSymbol::If.into(),
-            SchemeMacro::Builtin(BuiltinMacro::If),
-        );
-        self.push_macro(
-            AstSymbol::new("let"),
-            SchemeMacro::Builtin(BuiltinMacro::Let),
-        );
-        self.push_macro(
-            CoreSymbol::Let.into(),
-            SchemeMacro::Builtin(BuiltinMacro::Let),
-        );
-        self.push_macro(
-            AstSymbol::new("let*"),
-            SchemeMacro::Builtin(BuiltinMacro::LetStar),
-        );
-        self.push_macro(
-            CoreSymbol::LetStar.into(),
-            SchemeMacro::Builtin(BuiltinMacro::LetStar),
-        );
-        self.push_macro(
-            AstSymbol::new("begin"),
-            SchemeMacro::Builtin(BuiltinMacro::Begin),
-        );
-        self.push_macro(
-            CoreSymbol::Begin.into(),
-            SchemeMacro::Builtin(BuiltinMacro::Begin),
-        );
-        self.push_macro(
-            AstSymbol::new("set!"),
-            SchemeMacro::Builtin(BuiltinMacro::Set),
-        );
-        self.push_macro(
-            CoreSymbol::Set.into(),
-            SchemeMacro::Builtin(BuiltinMacro::Set),
-        );
-        self.push_macro(AstSymbol::new("or"), SchemeMacro::Builtin(BuiltinMacro::Or));
-        self.push_macro(
-            CoreSymbol::Or.into(),
-            SchemeMacro::Builtin(BuiltinMacro::Or),
-        );
-        self.push_macro(
-            AstSymbol::new("and"),
-            SchemeMacro::Builtin(BuiltinMacro::And),
-        );
-        self.push_macro(
-            CoreSymbol::And.into(),
-            SchemeMacro::Builtin(BuiltinMacro::And),
-        );
-        self.push_macro(
-            AstSymbol::new("quote"),
-            SchemeMacro::Builtin(BuiltinMacro::Quote),
-        );
-        self.push_macro(
-            AstSymbol::new("cond"),
-            SchemeMacro::Builtin(BuiltinMacro::Cond),
-        );
+        self.push_builtin_macro(AstSymbol::new("lambda"), BuiltinMacro::Lambda);
+        self.push_builtin_macro(CoreSymbol::Lambda.into(), BuiltinMacro::Lambda);
+        self.push_builtin_macro(AstSymbol::new("if"), BuiltinMacro::If);
+        self.push_builtin_macro(CoreSymbol::If.into(), BuiltinMacro::If);
+        self.push_builtin_macro(AstSymbol::new("let"), BuiltinMacro::Let);
+        self.push_builtin_macro(CoreSymbol::Let.into(), BuiltinMacro::Let);
+        self.push_builtin_macro(AstSymbol::new("let*"), BuiltinMacro::LetStar);
+        self.push_builtin_macro(CoreSymbol::LetStar.into(), BuiltinMacro::LetStar);
+        self.push_builtin_macro(AstSymbol::new("begin"), BuiltinMacro::Begin);
+        self.push_builtin_macro(CoreSymbol::Begin.into(), BuiltinMacro::Begin);
+        self.push_builtin_macro(AstSymbol::new("set!"), BuiltinMacro::Set);
+        self.push_builtin_macro(CoreSymbol::Set.into(), BuiltinMacro::Set);
+        self.push_builtin_macro(AstSymbol::new("or"), BuiltinMacro::Or);
+        self.push_builtin_macro(CoreSymbol::Or.into(), BuiltinMacro::Or);
+        self.push_builtin_macro(AstSymbol::new("and"), BuiltinMacro::And);
+        self.push_builtin_macro(CoreSymbol::And.into(), BuiltinMacro::And);
+        self.push_builtin_macro(AstSymbol::new("quote"), BuiltinMacro::Quote);
+        self.push_builtin_macro(AstSymbol::new("cond"), BuiltinMacro::Cond);
     }
 
-    fn push_macro(&mut self, name: AstSymbol, s_macro: SchemeMacro) {
-        self.map.insert(name, CompilerType::Macro(s_macro));
+    fn push_builtin_macro(&mut self, name: AstSymbol, s_macro: BuiltinMacro) {
+        self.map.insert(name, CompilerType::BuiltinMacro(s_macro));
     }
 
     fn lookup(&self, name: &AstSymbol) -> Option<CompilerType> {
@@ -168,8 +121,60 @@ fn push_tail_body(
 
 #[derive(Clone)]
 enum CompilerType {
-    Runtime(u32),
-    Macro(SchemeMacro),
+    RuntimeLocation(u32),
+    BuiltinMacro(BuiltinMacro),
+}
+
+impl CompilerType {
+    fn does_expand_as_fn(&self) -> bool {
+        match self {
+            CompilerType::BuiltinMacro(_) => true,
+            _ => false,
+        }
+    }
+
+    fn expand_as_fn(
+        &self,
+        args: Vec<AstNode>,
+        function: &mut PartialFunction,
+        state: CompilerState,
+    ) -> Result<Vec<CompilerAction>, CompilerError> {
+        match self {
+            CompilerType::BuiltinMacro(m) => m.expand(args, function, state),
+            _ => panic!(),
+        }
+    }
+
+    fn be_captured(self, name: &AstSymbol, in_function: &mut PartialFunction) -> Self {
+        match self {
+            CompilerType::RuntimeLocation(_) => {
+                let ret = in_function.environment.len();
+                let mut function = Some(in_function);
+
+                loop {
+                    let func = function.take().unwrap();
+                    func.environment.new_object(name.clone());
+
+                    if let Some(parent) = func.parent.as_mut() {
+                        if let Some(compiler_type) = parent.environment.lookup(name) {
+                            if let CompilerType::RuntimeLocation(ident) = compiler_type {
+                                func.compiled_code.new_capture(ident);
+                                return CompilerType::RuntimeLocation(ret);
+                            } else {
+                                unreachable!()
+                            }
+                        } else {
+                            func.compiled_code.new_capture(parent.environment.len());
+                            function = Some(parent);
+                        }
+                    } else {
+                        unreachable!()
+                    }
+                }
+            }
+            _ => self,
+        }
+    }
 }
 
 pub struct PartialFunction {
@@ -179,15 +184,12 @@ pub struct PartialFunction {
 }
 
 impl PartialFunction {
-    fn traverse_macro(&mut self, name: &AstSymbol) -> Result<Option<SchemeMacro>, CompilerError> {
+    fn traverse_macro(&mut self, name: &AstSymbol) -> Result<CompilerType, CompilerError> {
         let mut function = Some(self);
 
         while let Some(func) = function {
             if let Some(compiler_type) = func.environment.lookup(name) {
-                return Ok(match compiler_type {
-                    CompilerType::Runtime(_) => None,
-                    CompilerType::Macro(s_macro) => Some(s_macro),
-                });
+                return Ok(compiler_type);
             } else {
                 function = func.parent.as_mut().map(Box::deref_mut);
             }
@@ -201,36 +203,8 @@ impl PartialFunction {
             //Simple case: Variable has already been declared/looked up
             return Ok(ident);
         } else {
-            let macro_or_none = self.traverse_macro(name)?;
-
-            if let Some(s_macro) = macro_or_none {
-                self.environment.push_macro(name.clone(), s_macro.clone());
-                return Ok(CompilerType::Macro(s_macro));
-            } else {
-                let ret = self.environment.len();
-                let mut function = Some(self);
-
-                loop {
-                    let func = function.take().unwrap();
-                    func.environment.new_object(name.clone());
-
-                    if let Some(parent) = func.parent.as_mut() {
-                        if let Some(compiler_type) = parent.environment.lookup(name) {
-                            if let CompilerType::Runtime(ident) = compiler_type {
-                                func.compiled_code.new_capture(ident);
-                                return Ok(CompilerType::Runtime(ret));
-                            } else {
-                                unreachable!()
-                            }
-                        } else {
-                            func.compiled_code.new_capture(parent.environment.len());
-                            function = Some(parent);
-                        }
-                    } else {
-                        unreachable!()
-                    }
-                }
-            }
+            let s_macro = self.traverse_macro(name)?;
+            Ok(s_macro.be_captured(name, self))
         }
     }
 
@@ -320,12 +294,12 @@ pub fn compile_function(
                             //If the name is a macro, expand the macro
                             if let Some(function_name) = function_object.to_symbol() {
                                 let calling_function = function.lookup(&function_name)?;
-                                if let CompilerType::Macro(s_macro) = calling_function {
+                                if calling_function.does_expand_as_fn() {
                                     let code = current_code_block;
                                     current_code_block = Vec::new();
 
                                     stack.push(CompilerAction::PrependAsm { statements: code });
-                                    stack.append(&mut s_macro.expand(
+                                    stack.append(&mut calling_function.expand_as_fn(
                                         argv,
                                         &mut function,
                                         state,
@@ -382,7 +356,7 @@ pub fn compile_function(
                         expr.into_symbol().map(|ident_name| {
                             let ident_or_macro = function.lookup(&ident_name)?;
 
-                            if let CompilerType::Runtime(ident) = ident_or_macro {
+                            if let CompilerType::RuntimeLocation(ident) = ident_or_macro {
                                 if let CompilerState::Body = state {
                                 } else {
                                     current_code_block.push(Statement {

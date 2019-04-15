@@ -33,24 +33,6 @@ fn compile_one<T>(node: AstNode, state: CompilerState) -> Result<Vec<CompilerAct
 }
 
 #[derive(Clone)]
-pub enum SchemeMacro {
-    Builtin(BuiltinMacro),
-}
-
-impl SchemeMacro {
-    pub fn expand(
-        &self,
-        args: Vec<AstNode>,
-        function: &mut PartialFunction,
-        state: CompilerState,
-    ) -> Result<Vec<CompilerAction>, CompilerError> {
-        match self {
-            SchemeMacro::Builtin(s_macro) => s_macro.expand(args, function, state),
-        }
-    }
-}
-
-#[derive(Clone)]
 pub enum BuiltinMacro {
     Lambda,
     If,
@@ -66,7 +48,7 @@ pub enum BuiltinMacro {
 }
 
 impl BuiltinMacro {
-    fn expand(
+    pub fn expand(
         &self,
         mut args: Vec<AstNode>,
         function: &mut PartialFunction,
@@ -206,7 +188,7 @@ impl BuiltinMacro {
                     return Err(CompilerError::SyntaxError);
                 };
 
-                let var_id = if let CompilerType::Runtime(x) = function.lookup(&var)? {
+                let var_id = if let CompilerType::RuntimeLocation(x) = function.lookup(&var)? {
                     x
                 } else {
                     return Err(CompilerError::SyntaxError);
