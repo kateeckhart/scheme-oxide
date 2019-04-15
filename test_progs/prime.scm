@@ -14,9 +14,9 @@
                     (cond
                         ((pair? prime-rest) (test-primes (car prime-rest) (cdr prime-rest)))
                         ((null? prime-rest)
-                        (let ((new-tail (list possible-prime))) 
-                            (begin
-                                (set-cdr! prime-tail new-tail) 
-                                (display possible-prime)
-                                (newline)
-                                (new-prime new-tail))))))))))
+                            (let ((new-tail (list possible-prime))) 
+                                (begin
+                                    (set-cdr! prime-tail new-tail) 
+                                    (display possible-prime)
+                                    (newline)
+                                    (new-prime new-tail))))))))))
