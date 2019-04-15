@@ -63,6 +63,15 @@ fn gen_scheme_environment() -> BaseEnvironment {
 
     ret.frame.add_builtin_macros();
 
+    ret.push_object(
+        AstSymbol::new("$immutable-pair-type-id"),
+        get_immutable_pair_type_id().into(),
+    );
+    ret.push_object(
+        AstSymbol::new("$mutable-pair-type-id"),
+        get_mutable_pair_type_id().into(),
+    );
+
     ret.push_builtin_function(AstSymbol::new("+"), BuiltinFunction::Add);
     ret.push_builtin_function(AstSymbol::new("*"), BuiltinFunction::Mul);
     ret.push_builtin_function(AstSymbol::new("-"), BuiltinFunction::Sub);
@@ -125,6 +134,15 @@ fn gen_scheme_environment() -> BaseEnvironment {
         BuiltinFunction::GenUnspecified,
     );
 
+    ret.push_builtin_function(AstSymbol::new("make-string"), BuiltinFunction::NewString);
+    ret.push_builtin_function(AstSymbol::new("string-length"), BuiltinFunction::StringLen);
+    ret.push_builtin_function(AstSymbol::new("string-ref"), BuiltinFunction::GetChar);
+    ret.push_builtin_function(AstSymbol::new("string-set!"), BuiltinFunction::SetChar);
+    ret.push_builtin_function(AstSymbol::new("number?"), BuiltinFunction::IsNumber);
+    ret.push_builtin_function(AstSymbol::new("char?"), BuiltinFunction::IsChar);
+    ret.push_builtin_function(AstSymbol::new("string?"), BuiltinFunction::IsString);
+    ret.push_builtin_function(AstSymbol::new("write-char"), BuiltinFunction::WriteChar);
+
     ret.push_eval(AstSymbol::new("eq?"), "(lambda (x y) (eqv? x y))")
         .unwrap();
     ret.push_eval(AstSymbol::new("null?"), "(lambda (x) (eqv? x '()))")
@@ -152,15 +170,6 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_eval(AstSymbol::new("list"), "(lambda list list)")
         .unwrap();
 
-    ret.push_object(
-        AstSymbol::new("$immutable-pair-type-id"),
-        get_immutable_pair_type_id().into(),
-    );
-    ret.push_object(
-        AstSymbol::new("$mutable-pair-type-id"),
-        get_mutable_pair_type_id().into(),
-    );
-
     ret.push_eval(
         AstSymbol::new("$mutable-pair?"),
         "(lambda (x) (and ($object x) (eqv? ($object-type-id x) $mutable-pair-type-id)))",
@@ -168,7 +177,7 @@ fn gen_scheme_environment() -> BaseEnvironment {
     .unwrap();
     ret.push_eval(
         AstSymbol::new("pair?"),
-        "(lambda (x) (and ($object? x) (or (eqv? ($object-type-id x) $immutable-pair-type-id) ($mutable-pair? x))))",
+        "(lambda (x) (or ($mutable-pair? x) (and ($object? x) (eqv? ($object-type-id x) $immutable-pair-type-id))))",
     )
     .unwrap();
     ret.push_eval(
@@ -178,7 +187,7 @@ fn gen_scheme_environment() -> BaseEnvironment {
     .unwrap();
     ret.push_eval(
         AstSymbol::new("$assert-mutable-pair"),
-        r#"(lambda (name x) (if (not ($mutable-pair? x)) (error name "Not an mutable pair." x)))"#,
+        r#"(lambda (name x) (if (not ($mutable-pair? x)) (error name "Not a mutable pair." x)))"#,
     )
     .unwrap();
     ret.push_eval(
@@ -214,6 +223,115 @@ fn gen_scheme_environment() -> BaseEnvironment {
                     ((and (pair? x) (pair? y)) (and (equal? (car x) (car y)) (equal? (cdr x) (cdr y))))
                     (else (eqv? x y))))
         )").unwrap();
+
+    ret.push_eval(
+        AstSymbol::new("max"),
+        "
+        (lambda (x . in-rest)
+            (let max ((x x) (rest in-rest))
+                (if (null? rest)
+                    x
+                    (let ((y (car rest)) (new-rest (cdr rest)))
+                        (if (< x y)
+                        (max y new-rest)
+                        (max x new-rest))))))",
+    )
+    .unwrap();
+    ret.push_eval(
+        AstSymbol::new("min"),
+        "
+        (lambda (x . in-rest)
+            (let min ((x x) (rest in-rest))
+                (if (null? rest)
+                    x
+                    (let ((y (car rest)) (new-rest (cdr rest)))
+                        (if (< x y)
+                            (min x new-rest)
+                            (min y new-rest))))))",
+    )
+    .unwrap();
+
+    ret.push_eval(
+        AstSymbol::new("$string-copy-onto!"),
+        r#"
+        (lambda (src dest size)
+            (if (or (> size (string-length src)) (> size (string-length dest)))
+                (error '$string-copy-onto "Size is greater than length.")
+                (let copy-onto ((index 0))
+                    (if (= index size)
+                        (if #f #f)
+                        (let ((char (string-ref src index)))
+                            (string-set! dest index char)
+                            (copy-onto (+ index 1)))))))"#,
+    )
+    .unwrap();
+    ret.push_eval(
+        AstSymbol::new("$string-truncating-copy"),
+        r#"
+        (lambda (str size)
+            (if (zero? size)
+                ""
+                (let ((new_str (make-string size)) (chars-to-copy (min size (string-length str))))
+                    ($string-copy-onto! str new_str chars-to-copy)
+                    new_str)))"#,
+    )
+    .unwrap();
+    ret.push_eval(
+        AstSymbol::new("string-copy"),
+        "
+        (lambda (str)
+            ($string-truncating-copy str (string-length str)))",
+    )
+    .unwrap();
+    ret.push_eval(AstSymbol::new("list->string"), r#"
+        (lambda (lst)
+            (if (null? lst)
+                ""
+                (let conv-list ((built-string (make-string 1)) (index 0) (lst-head lst))
+                    (cond
+                        ((null? lst-head)
+                            (if (= (string-length built-string) index)
+                                built-string
+                                ($string-truncating-copy built-string index)))
+                        ((= index (string-length built-string))
+                            (conv-list ($string-truncating-copy built-string (* 2 index)) index lst-head))
+                        (else
+                            (string-set! built-string index (car lst-head))
+                            (conv-list built-string (+ 1 index) (cdr lst-head)))))))"#).unwrap();
+    ret.push_eval(AstSymbol::new("number->string"), r#"
+        (lambda (x)
+            (if (zero? x)
+                (string-copy "0")
+                (let to-string ((x x) (chars '()))
+                    (if (zero? x)
+                        (list->string chars)
+                        (let* ((digits "0123456789") (digit (string-ref digits (remainder x 10))) (rest (quotient x 10)))
+                            (to-string rest (cons digit chars)))))))"#).unwrap();
+    ret.push_eval(
+        AstSymbol::new("display"),
+        r##"
+        (lambda (x)
+            (let display ((x x))
+                (cond
+                    ((string? x)
+                        (let print-str ((index 0))
+                            (if (= (string-length x) index)
+                                (if #f #f)
+                                (begin
+                                    (write-char (string-ref x index))
+                                    (print-str (+ 1 index))))))
+                    ((number? x) (display (number->string x)))
+                    ((boolean? x) (if x (display "#t") (display "#f")))
+                    (else (display "#Unwriteable_object")))))"##,
+    )
+    .unwrap();
+    let newline_str: SchemeString = "\n".parse().unwrap();
+    ret.push_object(AstSymbol::new("$newline-str"), newline_str.into());
+    ret.push_eval(
+        AstSymbol::new("newline"),
+        "(lambda () (display $newline-str))",
+    )
+    .unwrap();
 
     ret
 }

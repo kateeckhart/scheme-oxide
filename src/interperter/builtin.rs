@@ -40,8 +40,12 @@ pub enum BuiltinFunction {
     GetTypeId,
     GetField,
     SetField,
-    NewObject,
     GetChar,
+    SetChar,
+    NewObject,
+    NewString,
+    StringLen,
+    WriteChar,
 }
 
 fn gen_unspecified() -> SchemeType {
@@ -63,7 +67,7 @@ impl BuiltinFunction {
                 Ok(Some(SchemeType::Number(sum)))
             }
             BuiltinFunction::Mul => {
-                let mut product = 0;
+                let mut product = 1;
                 for num in args {
                     product *= num.to_number()?
                 }
@@ -226,14 +230,6 @@ impl BuiltinFunction {
                     .map(|_| Some(gen_unspecified()))
                     .map_err(|_| RuntimeError::OutOfBounds)
             }
-            BuiltinFunction::NewObject => {
-                if args.is_empty() {
-                    return Err(RuntimeError::ArgError);
-                }
-
-                let type_id = args.remove(0);
-                Ok(Some(SchemeObject::new(type_id, args).into()))
-            }
             BuiltinFunction::GetChar => {
                 if args.len() != 2 {
                     return Err(RuntimeError::ArgError);
@@ -246,6 +242,62 @@ impl BuiltinFunction {
                     .get(index)
                     .ok_or(RuntimeError::OutOfBounds)
                     .map(|c| Some(SchemeType::Char(c)))
+            }
+            BuiltinFunction::SetChar => {
+                if args.len() != 3 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                let c = args.pop().unwrap().to_char()?;
+                let index = args.pop().unwrap().to_index()?;
+                let string = args.pop().unwrap().into_string()?;
+
+                string
+                    .set(index, c)
+                    .map(|_| Some(gen_unspecified()))
+                    .map_err(|_| RuntimeError::AssertFailed)
+            }
+            BuiltinFunction::NewObject => {
+                if args.is_empty() {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                let type_id = args.remove(0);
+                Ok(Some(SchemeObject::new(type_id, args).into()))
+            }
+            BuiltinFunction::NewString => {
+                let fill;
+
+                if args.len() == 1 {
+                    fill = '\0';
+                } else if args.len() == 2 {
+                    fill = args.pop().unwrap().to_char()?;
+                } else {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                let size = args.pop().unwrap().to_index()?;
+
+                Ok(Some(SchemeString::new(size, fill).into()))
+            }
+            BuiltinFunction::StringLen => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                let string = args.pop().unwrap().into_string()?;
+
+                Ok(Some(string.len().into()))
+            }
+            BuiltinFunction::WriteChar => {
+                if args.len() != 1 {
+                    return Err(RuntimeError::ArgError);
+                }
+
+                let c = args.pop().unwrap().to_char()?;
+
+                print!("{}", c);
+                Ok(Some(gen_unspecified()))
             }
         }
     }

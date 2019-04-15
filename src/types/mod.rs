@@ -104,6 +104,14 @@ impl SchemeType {
         }
     }
 
+    pub fn to_char(&self) -> Result<char, CastError> {
+        if let SchemeType::Char(c) = self {
+            Ok(*c)
+        } else {
+            Err(CastError)
+        }
+    }
+
     pub fn into_object(self) -> Result<SchemeObject, CastError> {
         if let SchemeType::Object(obj) = self {
             Ok(obj)
@@ -159,6 +167,12 @@ impl From<SchemeObject> for SchemeType {
     }
 }
 
+impl From<SchemeString> for SchemeType {
+    fn from(string: SchemeString) -> Self {
+        SchemeType::String(string)
+    }
+}
+
 impl From<bool> for SchemeType {
     fn from(is_true: bool) -> Self {
         if is_true {
@@ -166,5 +180,15 @@ impl From<bool> for SchemeType {
         } else {
             get_false().into()
         }
+    }
+}
+
+impl From<usize> for SchemeType {
+    fn from(index: usize) -> SchemeType {
+        if (index as u64) > (i64::max_value() as u64) {
+            panic!("Overflow")
+        }
+
+        SchemeType::Number(index as i64)
     }
 }
