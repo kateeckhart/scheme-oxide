@@ -18,8 +18,7 @@
 */
 
 use super::{
-    push_tail_body, CompilerAction, CompilerError, CompilerState, CompilerType, EnvironmentFrame,
-    PartialFunction,
+    push_tail_body, CompilerAction, CompilerError, CompilerState, EnvironmentFrame, PartialFunction,
 };
 use crate::ast::{AstList, AstNode, AstSymbol, CoreSymbol};
 use crate::interperter::vm::{SchemeFunction, Statement, StatementType};

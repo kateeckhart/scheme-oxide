@@ -96,7 +96,7 @@ impl str::FromStr for SchemeString {
         }
 
         if s == "" {
-            return Ok(EMPTY_STRING.with(|empty| empty.clone()));
+            return Ok(EMPTY_STRING.with(Clone::clone));
         }
 
         let mut chars = Vec::new();

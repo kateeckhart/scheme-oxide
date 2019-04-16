@@ -298,7 +298,7 @@ impl PartialFunction {
                 return true;
             }
 
-            current_scope_or_none = current_scope.parent.as_ref().map(|x| x.deref());
+            current_scope_or_none = current_scope.parent.as_ref().map(Deref::deref);
         }
         false
     }

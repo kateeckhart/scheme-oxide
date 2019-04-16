@@ -34,7 +34,7 @@ macro_rules! gen_singleton {
             thread_local! {
                 static SINGLETON: SchemeObject = SchemeObject::unique_new()
             }
-            SINGLETON.with(|s| s.clone())
+            SINGLETON.with(Clone::clone)
         }
     };
 }
