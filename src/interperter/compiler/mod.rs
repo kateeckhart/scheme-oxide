@@ -248,7 +248,13 @@ impl CompilerType {
                     }
                 }
             }
-            _ => self,
+            _ => {
+                in_function
+                    .environment
+                    .map
+                    .insert(name.clone(), self.clone());
+                self
+            }
         }
     }
 }
