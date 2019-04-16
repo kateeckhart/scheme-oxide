@@ -27,6 +27,13 @@ use std::vec;
 mod s_macro;
 use self::s_macro::BuiltinMacro;
 
+fn compile_one<T>(node: AstNode, state: CompilerState) -> Result<Vec<CompilerAction>, T> {
+    Ok(vec![CompilerAction::Compile {
+        code: vec![node].into_iter(),
+        state,
+    }])
+}
+
 #[derive(Clone)]
 pub struct EnvironmentFrame {
     map: HashMap<AstSymbol, CompilerType>,
@@ -71,6 +78,7 @@ impl EnvironmentFrame {
         self.push_builtin_macro(AstSymbol::new("and"), BuiltinMacro::And);
         self.push_builtin_macro(CoreSymbol::And.into(), BuiltinMacro::And);
         self.push_builtin_macro(AstSymbol::new("quote"), BuiltinMacro::Quote);
+        self.push_builtin_macro(CoreSymbol::Quote.into(), BuiltinMacro::Quote);
         self.push_builtin_macro(AstSymbol::new("cond"), BuiltinMacro::Cond);
     }
 
@@ -122,6 +130,7 @@ fn push_tail_body(
 #[derive(Clone)]
 enum CompilerType {
     RuntimeLocation(u32),
+    MaybeUndef { field: AstSymbol, is_def: AstSymbol },
     BuiltinMacro(BuiltinMacro),
 }
 
@@ -148,12 +157,14 @@ impl CompilerType {
     fn does_expand_as_self(&self) -> bool {
         match self {
             CompilerType::RuntimeLocation(_) => true,
+            CompilerType::MaybeUndef { .. } => true,
             _ => false,
         }
     }
 
     fn expand_as_self(
         &self,
+        name: &AstSymbol,
         _function: &mut PartialFunction,
         state: CompilerState,
     ) -> Result<Vec<CompilerAction>, CompilerError> {
@@ -170,6 +181,22 @@ impl CompilerType {
                     }])
                 }
             }
+            CompilerType::MaybeUndef { field, is_def } => {
+                let quoted_name = vec![CoreSymbol::Quote.into(), name.clone().into()];
+                let error_list = vec![
+                    CoreSymbol::Error.into(),
+                    quoted_name.into(),
+                    AstNode::from_string("Tried to read from undef.".to_string()),
+                ];
+                let if_list = vec![
+                    CoreSymbol::If.into(),
+                    is_def.clone().into(),
+                    field.clone().into(),
+                    error_list.into(),
+                ];
+
+                compile_one(if_list.into(), state)
+            }
             _ => panic!(),
         }
     }
@@ -177,6 +204,7 @@ impl CompilerType {
     fn does_expand_as_set(&self) -> bool {
         match self {
             CompilerType::RuntimeLocation(_) => true,
+            CompilerType::MaybeUndef { .. } => true,
             _ => false,
         }
     }
@@ -216,6 +244,30 @@ impl CompilerType {
                 });
 
                 Ok(ret)
+            }
+            CompilerType::MaybeUndef { field, is_def } => {
+                if args.len() != 1 {
+                    return Err(CompilerError::SyntaxError);
+                }
+
+                let set_is_def = vec![
+                    CoreSymbol::Set.into(),
+                    is_def.clone().into(),
+                    AstNode::from_bool(true),
+                ];
+                let set_field = vec![
+                    CoreSymbol::Set.into(),
+                    field.clone().into(),
+                    args.pop().unwrap(),
+                ];
+
+                let begin_list = vec![
+                    CoreSymbol::Begin.into(),
+                    set_is_def.into(),
+                    set_field.into(),
+                ];
+
+                compile_one(begin_list.into(), state)
             }
             _ => panic!(),
         }
@@ -443,7 +495,11 @@ pub fn compile_function(
                                 current_code_block = Vec::new();
 
                                 stack.push(CompilerAction::PrependAsm { statements: code });
-                                stack.append(&mut ident.expand_as_self(&mut function, state)?);
+                                stack.append(&mut ident.expand_as_self(
+                                    &ident_name,
+                                    &mut function,
+                                    state,
+                                )?);
                                 continue 'stack_loop;
                             }
 

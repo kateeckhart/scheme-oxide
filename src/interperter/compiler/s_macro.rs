@@ -18,18 +18,12 @@
 */
 
 use super::{
-    push_tail_body, CompilerAction, CompilerError, CompilerState, EnvironmentFrame, PartialFunction,
+    compile_one, push_tail_body, CompilerAction, CompilerError, CompilerState, EnvironmentFrame,
+    PartialFunction,
 };
 use crate::ast::{AstList, AstNode, AstSymbol, CoreSymbol};
 use crate::interperter::vm::{SchemeFunction, Statement, StatementType};
 use std::mem::replace;
-
-fn compile_one<T>(node: AstNode, state: CompilerState) -> Result<Vec<CompilerAction>, T> {
-    Ok(vec![CompilerAction::Compile {
-        code: vec![node].into_iter(),
-        state,
-    }])
-}
 
 #[derive(Clone)]
 pub enum BuiltinMacro {
@@ -41,9 +35,46 @@ pub enum BuiltinMacro {
     //TODO: When syntax-rules is added, change into derived form.
     Let,
     LetStar,
+    LetRec,
     Or,
     And,
     Cond,
+}
+
+struct LetDef {
+    formal: AstSymbol,
+    binding: AstNode,
+}
+
+impl LetDef {
+    fn from_raw_let(raw_defs: Vec<AstNode>) -> Result<Vec<LetDef>, CompilerError> {
+        let mut defs = Vec::new();
+
+        for definition_or_err in raw_defs {
+            let mut definition = if let Ok(def) = definition_or_err.into_proper_list() {
+                def
+            } else {
+                return Err(CompilerError::SyntaxError);
+            };
+
+            if definition.len() != 2 {
+                return Err(CompilerError::SyntaxError);
+            }
+
+            let binding = definition.pop().unwrap();
+            let raw_formal = definition.pop().unwrap().into_symbol();
+
+            let formal = if let Ok(formal) = raw_formal {
+                formal
+            } else {
+                return Err(CompilerError::SyntaxError);
+            };
+
+            defs.push(LetDef { formal, binding })
+        }
+
+        Ok(defs)
+    }
 }
 
 impl BuiltinMacro {
@@ -245,23 +276,11 @@ impl BuiltinMacro {
                     }
                 };
 
-                let mut formals = Vec::new();
-                let mut bindings = Vec::new();
-
-                for definition_or_err in definitions {
-                    let mut definition = if let Ok(def) = definition_or_err.into_proper_list() {
-                        def
-                    } else {
-                        return Err(CompilerError::SyntaxError);
-                    };
-
-                    if definition.len() != 2 {
-                        return Err(CompilerError::SyntaxError);
-                    }
-
-                    bindings.push(definition.pop().unwrap());
-                    formals.push(definition.pop().unwrap());
-                }
+                let defs = LetDef::from_raw_let(definitions)?;
+                let (mut bindings, formals): (Vec<_>, Vec<AstNode>) = defs
+                    .into_iter()
+                    .map(|def| (def.binding, def.formal.into()))
+                    .unzip();
 
                 let mut lambda_def = vec![CoreSymbol::Lambda.into(), formals.into()];
                 lambda_def.append(&mut args);
@@ -327,6 +346,7 @@ impl BuiltinMacro {
 
                 compile_one(let_list.into(), state)
             }
+            BuiltinMacro::LetRec => unimplemented!(),
             BuiltinMacro::And => {
                 let expr = if args.is_empty() {
                     AstNode::from_bool(true)

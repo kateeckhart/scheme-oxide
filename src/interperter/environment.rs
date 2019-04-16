@@ -124,6 +124,7 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_builtin_function(AstSymbol::new("quotient"), BuiltinFunction::Quotient);
     ret.push_builtin_function(AstSymbol::new("remainder"), BuiltinFunction::Remainder);
     ret.push_builtin_function(AstSymbol::new("error"), BuiltinFunction::Error);
+    ret.push_builtin_function(CoreSymbol::Error.into(), BuiltinFunction::Error);
 
     ret.push_builtin_function(
         CoreSymbol::GenUnspecified.into(),
