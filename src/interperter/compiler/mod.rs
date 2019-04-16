@@ -145,6 +145,82 @@ impl CompilerType {
         }
     }
 
+    fn does_expand_as_self(&self) -> bool {
+        match self {
+            CompilerType::RuntimeLocation(_) => true,
+            _ => false,
+        }
+    }
+
+    fn expand_as_self(
+        &self,
+        _function: &mut PartialFunction,
+        state: CompilerState,
+    ) -> Result<Vec<CompilerAction>, CompilerError> {
+        match self {
+            CompilerType::RuntimeLocation(ident) => {
+                if let CompilerState::Body = state {
+                    Ok(Vec::new())
+                } else {
+                    Ok(vec![CompilerAction::EmitAsm {
+                        statements: vec![Statement {
+                            s_type: StatementType::Get,
+                            arg: *ident,
+                        }],
+                    }])
+                }
+            }
+            _ => panic!(),
+        }
+    }
+
+    fn does_expand_as_set(&self) -> bool {
+        match self {
+            CompilerType::RuntimeLocation(_) => true,
+            _ => false,
+        }
+    }
+
+    fn expand_as_set(
+        &self,
+        mut args: Vec<AstNode>,
+        _function: &mut PartialFunction,
+        state: CompilerState,
+    ) -> Result<Vec<CompilerAction>, CompilerError> {
+        match self {
+            CompilerType::RuntimeLocation(var_id) => {
+                if args.len() != 1 {
+                    return Err(CompilerError::SyntaxError);
+                }
+                let expr = args.pop().unwrap();
+                let mut ret = Vec::new();
+
+                if let CompilerState::Body = state {
+                } else {
+                    ret.push(CompilerAction::Compile {
+                        code: vec![CoreSymbol::GenUnspecified.into()].into_iter(),
+                        state,
+                    });
+                }
+
+                ret.push(CompilerAction::EmitAsm {
+                    statements: vec![Statement {
+                        s_type: StatementType::Set,
+                        arg: *var_id,
+                    }],
+                });
+
+                ret.push(CompilerAction::Compile {
+                    code: vec![expr].into_iter(),
+                    state: CompilerState::Args,
+                });
+
+                Ok(ret)
+            }
+            _ => panic!(),
+        }
+    }
+
     fn be_captured(self, name: &AstSymbol, in_function: &mut PartialFunction) -> Self {
         match self {
             CompilerType::RuntimeLocation(_) => {
@@ -280,7 +356,7 @@ pub fn compile_function(
                 while let Some(expr) = code.next() {
                     //Function call/Macro use
                     let list_or_err = expr.into_proper_list();
-                    let list_parsed_or_err = match list_or_err {
+                    let list_parsed_err = match list_or_err {
                         Ok(mut argv) => {
                             //Backup the rest of the expressions in this block
                             stack.push(CompilerAction::Compile { code, state });
@@ -349,45 +425,40 @@ pub fn compile_function(
 
                             continue 'stack_loop;
                         }
-                        Err(err) => Err(err),
+                        Err(err) => err,
                     };
 
-                    let res = list_parsed_or_err.or_else(|expr| {
-                        expr.into_symbol().map(|ident_name| {
-                            let ident_or_macro = function.lookup(&ident_name)?;
+                    let sym_parsed_err = match list_parsed_err.into_symbol() {
+                        Ok(ident_name) => {
+                            let ident = function.lookup(&ident_name)?;
+                            if ident.does_expand_as_self() {
+                                stack.push(CompilerAction::Compile { code, state });
+                                let code = current_code_block;
+                                current_code_block = Vec::new();
 
-                            if let CompilerType::RuntimeLocation(ident) = ident_or_macro {
-                                if let CompilerState::Body = state {
-                                } else {
-                                    current_code_block.push(Statement {
-                                        s_type: StatementType::Get,
-                                        arg: ident,
-                                    })
-                                }
-                            } else {
-                                return Err(CompilerError::SyntaxError);
-                            }
-                            Ok(())
-                        })
-                    });
-
-                    match res {
-                        Ok(Err(err)) => return Err(err),
-                        Ok(Ok(_)) => (),
-                        Err(expr) => {
-                            if expr.is_improper_list() {
-                                return Err(CompilerError::SyntaxError);
+                                stack.push(CompilerAction::PrependAsm { statements: code });
+                                stack.append(&mut ident.expand_as_self(&mut function, state)?);
+                                continue 'stack_loop;
                             }
 
-                            if let CompilerState::Body = state {
-                            } else {
-                                current_code_block.push(Statement {
-                                    s_type: StatementType::Literal,
-                                    arg: function.compiled_code.literal_len() as u32,
-                                });
-                                function.compiled_code.new_literal(expr.to_datum());
-                            }
+                            return Err(CompilerError::SyntaxError);
                         }
+                        Err(expr) => expr,
+                    };
+
+                    if sym_parsed_err.is_improper_list() {
+                        return Err(CompilerError::SyntaxError);
+                    }
+
+                    if let CompilerState::Body = state {
+                    } else {
+                        current_code_block.push(Statement {
+                            s_type: StatementType::Literal,
+                            arg: function.compiled_code.literal_len() as u32,
+                        });
+                        function
+                            .compiled_code
+                            .new_literal(sym_parsed_err.to_datum());
                     }
                 }
             }

@@ -177,46 +177,22 @@ impl BuiltinMacro {
                 ])
             }
             BuiltinMacro::Set => {
-                if args.len() != 2 {
+                if args.is_empty() {
                     return Err(CompilerError::SyntaxError);
                 }
 
-                let expr = args.pop().unwrap();
-                let var = if let Ok(x) = args.pop().unwrap().into_symbol() {
+                let var = if let Ok(x) = args.remove(0).into_symbol() {
                     x
                 } else {
                     return Err(CompilerError::SyntaxError);
                 };
 
-                let var_id = if let CompilerType::RuntimeLocation(x) = function.lookup(&var)? {
-                    x
+                let compiler_type = function.lookup(&var)?;
+                if compiler_type.does_expand_as_set() {
+                    compiler_type.expand_as_set(args, function, state)
                 } else {
-                    return Err(CompilerError::SyntaxError);
-                };
-
-                let mut ret = Vec::new();
-
-                if let CompilerState::Body = state {
-                } else {
-                    ret.push(CompilerAction::Compile {
-                        code: vec![CoreSymbol::GenUnspecified.into()].into_iter(),
-                        state,
-                    });
+                    Err(CompilerError::SyntaxError)
                 }
-
-                ret.push(CompilerAction::EmitAsm {
-                    statements: vec![Statement {
-                        s_type: StatementType::Set,
-                        arg: var_id,
-                    }],
-                });
-
-                ret.push(CompilerAction::Compile {
-                    code: vec![expr].into_iter(),
-                    state: CompilerState::Args,
-                });
-
-                Ok(ret)
             }
             BuiltinMacro::Begin => {
                 let mut code = vec![CoreSymbol::Let.into(), AstList::none().into()];
