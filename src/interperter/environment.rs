@@ -220,10 +220,11 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_eval(AstSymbol::new("equal?"), "
         (lambda (x y)
             (let equal? ((x x) (y y))
-                (cond
-                    ((and (pair? x) (pair? y)) (and (equal? (car x) (car y)) (equal? (cdr x) (cdr y))))
-                    (else (eqv? x y))))
-        )").unwrap();
+                (if (eqv? x y)
+                    #t
+                    (cond
+                        ((and (pair? x) (pair? y)) (and (equal? (car x) (car y)) (equal? (cdr x) (cdr y))))
+                        (else #f)))))").unwrap();
 
     ret.push_eval(
         AstSymbol::new("max"),
