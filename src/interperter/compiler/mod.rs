@@ -392,6 +392,43 @@ pub enum CompilerAction {
     },
 }
 
+fn add_call(argv: Vec<AstNode>, state: CompilerState) -> Vec<CompilerAction> {
+    let mut stack = Vec::new();
+
+    let argc = argv.len() as u32;
+
+    let s_type = if let CompilerState::Tail = state {
+        StatementType::Tail
+    } else {
+        StatementType::Call
+    };
+
+    //Compile the call to the function
+    let mut statements = vec![Statement {
+        s_type,
+        arg: argc as u32,
+    }];
+
+    if let CompilerState::Body = state {
+        statements.push(Statement {
+            s_type: StatementType::Discard,
+            arg: 0,
+        })
+    };
+
+    stack.push(CompilerAction::EmitAsm { statements });
+
+    //Compile the arguments to the function
+    if !argv.is_empty() {
+        stack.push(CompilerAction::Compile {
+            code: argv.into_iter(),
+            state: CompilerState::Args,
+        });
+    }
+
+    stack
+}
+
 pub fn compile_function(
     base_environment: &EnvironmentFrame,
     code: Vec<AstNode>,
@@ -442,38 +479,9 @@ pub fn compile_function(
                                 }
                             }
 
-                            let argc = argv.len();
-
-                            let s_type = if let CompilerState::Tail = state {
-                                StatementType::Tail
-                            } else {
-                                StatementType::Call
-                            };
-
-                            //Compile the call to the function
-                            let mut statements = vec![Statement {
-                                s_type,
-                                arg: argc as u32,
-                            }];
-
-                            if let CompilerState::Body = state {
-                                statements.push(Statement {
-                                    s_type: StatementType::Discard,
-                                    arg: 0,
-                                })
-                            };
-
-                            stack.push(CompilerAction::EmitAsm { statements });
+                            stack.append(&mut add_call(argv, state));
 
                             let function_name = vec![function_object];
-
-                            //Compile the arguments to the function
-                            if !argv.is_empty() {
-                                stack.push(CompilerAction::Compile {
-                                    code: argv.into_iter(),
-                                    state: CompilerState::Args,
-                                });
-                            }
 
                             //Compile expression that evaluates to the function
                             stack.push(CompilerAction::Compile {
