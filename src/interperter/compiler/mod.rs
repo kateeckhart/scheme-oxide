@@ -21,6 +21,7 @@ use crate::ast::{AstNode, AstSymbol, CoreSymbol};
 use crate::interperter::vm::{SchemeFunction, Statement, StatementType};
 use crate::types::*;
 use std::collections::HashMap;
+use std::mem::replace;
 use std::ops::{Deref, DerefMut};
 use std::vec;
 
@@ -103,20 +104,17 @@ impl From<CastError> for CompilerError {
     }
 }
 
-fn push_tail_body(
-    mut code: Vec<AstNode>,
-    stack: &mut Vec<CompilerAction>,
-) -> Result<(), CompilerError> {
+fn gen_tail_body(mut code: Vec<AstNode>) -> Result<Vec<CompilerAction>, CompilerError> {
     if code.is_empty() {
         return Err(CompilerError::SyntaxError);
     }
 
     let tail = code.pop().unwrap();
 
-    stack.push(CompilerAction::Compile {
+    let mut stack = vec![CompilerAction::Compile {
         code: vec![tail].into_iter(),
         state: CompilerState::Tail,
-    });
+    }];
 
     if !code.is_empty() {
         stack.push(CompilerAction::Compile {
@@ -124,10 +122,10 @@ fn push_tail_body(
             state: CompilerState::Body,
         })
     }
-    Ok(())
+    Ok(stack)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum CompilerType {
     RuntimeLocation(u32),
     MaybeUndef { field: AstSymbol, is_def: AstSymbol },
@@ -363,6 +361,172 @@ pub enum CompilerState {
     Args,
 }
 
+struct LetDef {
+    formal: AstSymbol,
+    binding: AstNode,
+}
+
+impl LetDef {
+    fn from_raw_let(raw_defs: Vec<AstNode>) -> Result<Vec<LetDef>, CompilerError> {
+        let mut defs = Vec::new();
+
+        for definition_or_err in raw_defs {
+            let mut definition = if let Ok(def) = definition_or_err.into_proper_list() {
+                def
+            } else {
+                return Err(CompilerError::SyntaxError);
+            };
+
+            if definition.len() != 2 {
+                return Err(CompilerError::SyntaxError);
+            }
+
+            let binding = definition.pop().unwrap();
+            let raw_formal = definition.pop().unwrap().into_symbol();
+
+            let formal = if let Ok(formal) = raw_formal {
+                formal
+            } else {
+                return Err(CompilerError::SyntaxError);
+            };
+
+            defs.push(LetDef { formal, binding })
+        }
+
+        Ok(defs)
+    }
+}
+
+#[derive(Debug)]
+pub struct LambdaBuilder {
+    actions: Vec<CompilerAction>,
+    args: Vec<AstSymbol>,
+    vargs: Option<AstSymbol>,
+    macros: Vec<(AstSymbol, CompilerType)>,
+    state: CompilerState,
+}
+
+impl LambdaBuilder {
+    fn new(actions: Vec<CompilerAction>, state: CompilerState) -> Self {
+        Self {
+            actions,
+            args: Vec::new(),
+            vargs: None,
+            macros: Vec::new(),
+            state,
+        }
+    }
+
+    fn from_body_exprs(body: Vec<AstNode>, state: CompilerState) -> Result<Self, CompilerError> {
+        Ok(Self::new(gen_tail_body(body)?, state))
+    }
+
+    fn add_args<T>(&mut self, args: T)
+    where
+        T: IntoIterator<Item = AstSymbol>,
+    {
+        self.args.extend(args)
+    }
+
+    fn add_vargs(&mut self, vargs: AstSymbol) {
+        self.vargs = Some(vargs)
+    }
+
+    fn add_macros<T>(&mut self, macros: T)
+    where
+        T: IntoIterator<Item = (AstSymbol, CompilerType)>,
+    {
+        self.macros.extend(macros)
+    }
+
+    fn build(
+        mut self,
+        function: &mut PartialFunction,
+    ) -> Result<Vec<CompilerAction>, CompilerError> {
+        let mut new_env = EnvironmentFrame::new();
+        let arg_count = self.args.len() as u32;
+
+        for arg in self.args {
+            new_env.new_object(arg);
+        }
+
+        let is_vargs = if let Some(vargs) = self.vargs {
+            new_env.new_object(vargs);
+            true
+        } else {
+            false
+        };
+
+        for (name, s_macro) in self.macros {
+            new_env.map.insert(name, s_macro);
+        }
+
+        let parent = replace(
+            function,
+            PartialFunction {
+                compiled_code: SchemeFunction::new(arg_count, is_vargs),
+                environment: new_env,
+                parent: None,
+            },
+        );
+
+        let lamada_n = parent.compiled_code.lambda_len();
+
+        function.parent = Some(Box::new(parent));
+
+        let mut ret = Vec::new();
+        if let CompilerState::Body = self.state {
+        } else {
+            ret.push(CompilerAction::EmitAsm {
+                statements: vec![Statement {
+                    arg: lamada_n as u32,
+                    s_type: StatementType::Lamada,
+                }],
+            })
+        }
+        ret.push(CompilerAction::FunctionDone);
+        ret.append(&mut self.actions);
+        Ok(ret)
+    }
+
+    fn build_with_call(
+        mut self,
+        bindings: Vec<AstNode>,
+        state: CompilerState,
+    ) -> Result<Vec<CompilerAction>, CompilerError> {
+        self.state = CompilerState::Args;
+
+        if self.vargs.is_some() {
+            assert!(self.args.len() <= bindings.len())
+        } else {
+            assert_eq!(self.args.len(), bindings.len())
+        }
+
+        let mut compile_actions = add_call(bindings, state);
+
+        compile_actions.push(CompilerAction::Lambda(self));
+
+        Ok(compile_actions)
+    }
+
+    fn build_using_letdefs<T>(
+        mut self,
+        defs: T,
+        state: CompilerState,
+    ) -> Result<Vec<CompilerAction>, CompilerError>
+    where
+        T: IntoIterator<Item = LetDef>,
+    {
+        let (bindings, formals): (Vec<_>, Vec<_>) = defs
+            .into_iter()
+            .map(|def| (def.binding, def.formal))
+            .unzip();
+        self.add_args(formals);
+
+        self.build_with_call(bindings, state)
+    }
+}
+
 #[derive(Debug)]
 pub enum CompilerAction {
     Compile {
@@ -376,6 +540,7 @@ pub enum CompilerAction {
     PrependAsm {
         statements: Vec<Statement>,
     },
+    Lambda(LambdaBuilder),
     IfCompileTrue {
         true_expr: AstNode,
         false_expr: AstNode,
@@ -435,7 +600,7 @@ pub fn compile_function(
 ) -> Result<SchemeFunction, CompilerError> {
     let mut stack = vec![CompilerAction::FunctionDone];
 
-    push_tail_body(code, &mut stack)?;
+    stack.append(&mut gen_tail_body(code)?);
 
     let mut function = PartialFunction {
         compiled_code: SchemeFunction::default(),
@@ -466,10 +631,6 @@ pub fn compile_function(
                             if let Some(function_name) = function_object.to_symbol() {
                                 let calling_function = function.lookup(&function_name)?;
                                 if calling_function.does_expand_as_fn() {
-                                    let code = current_code_block;
-                                    current_code_block = Vec::new();
-
-                                    stack.push(CompilerAction::PrependAsm { statements: code });
                                     stack.append(&mut calling_function.expand_as_fn(
                                         argv,
                                         &mut function,
@@ -499,10 +660,7 @@ pub fn compile_function(
                             let ident = function.lookup(&ident_name)?;
                             if ident.does_expand_as_self() {
                                 stack.push(CompilerAction::Compile { code, state });
-                                let code = current_code_block;
-                                current_code_block = Vec::new();
 
-                                stack.push(CompilerAction::PrependAsm { statements: code });
                                 stack.append(&mut ident.expand_as_self(
                                     &ident_name,
                                     &mut function,
@@ -549,6 +707,13 @@ pub fn compile_function(
                 } else {
                     break 'stack_loop;
                 }
+            }
+            CompilerAction::Lambda(builder) => {
+                let code = current_code_block;
+                current_code_block = Vec::new();
+
+                stack.push(CompilerAction::PrependAsm { statements: code });
+                stack.append(&mut builder.build(&mut function)?)
             }
             CompilerAction::IfCompileTrue {
                 true_expr,

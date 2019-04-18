@@ -18,14 +18,13 @@
 */
 
 use super::{
-    add_call, compile_one, push_tail_body, CompilerAction, CompilerError, CompilerState,
-    CompilerType, EnvironmentFrame, PartialFunction,
+    compile_one, CompilerAction, CompilerError, CompilerState, LambdaBuilder, LetDef,
+    PartialFunction,
 };
 use crate::ast::{AstList, AstNode, AstSymbol, CoreSymbol};
-use crate::interperter::vm::{SchemeFunction, Statement, StatementType};
-use std::mem::replace;
+use crate::interperter::vm::{Statement, StatementType};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum BuiltinMacro {
     Lambda,
     If,
@@ -39,162 +38,6 @@ pub enum BuiltinMacro {
     Or,
     And,
     Cond,
-}
-
-struct LetDef {
-    formal: AstSymbol,
-    binding: AstNode,
-}
-
-impl LetDef {
-    fn from_raw_let(raw_defs: Vec<AstNode>) -> Result<Vec<LetDef>, CompilerError> {
-        let mut defs = Vec::new();
-
-        for definition_or_err in raw_defs {
-            let mut definition = if let Ok(def) = definition_or_err.into_proper_list() {
-                def
-            } else {
-                return Err(CompilerError::SyntaxError);
-            };
-
-            if definition.len() != 2 {
-                return Err(CompilerError::SyntaxError);
-            }
-
-            let binding = definition.pop().unwrap();
-            let raw_formal = definition.pop().unwrap().into_symbol();
-
-            let formal = if let Ok(formal) = raw_formal {
-                formal
-            } else {
-                return Err(CompilerError::SyntaxError);
-            };
-
-            defs.push(LetDef { formal, binding })
-        }
-
-        Ok(defs)
-    }
-}
-
-struct LambdaBuilder<'a> {
-    function: &'a mut PartialFunction,
-    body: Vec<AstNode>,
-    args: Vec<AstSymbol>,
-    vargs: Option<AstSymbol>,
-    macros: Vec<(AstSymbol, CompilerType)>,
-}
-
-impl<'a> LambdaBuilder<'a> {
-    fn new(function: &'a mut PartialFunction, body: Vec<AstNode>) -> Self {
-        Self {
-            function,
-            body,
-            args: Vec::new(),
-            vargs: None,
-            macros: Vec::new(),
-        }
-    }
-
-    fn add_args<T>(&mut self, args: T)
-    where
-        T: IntoIterator<Item = AstSymbol>,
-    {
-        self.args.extend(args)
-    }
-
-    fn add_vargs(&mut self, vargs: AstSymbol) {
-        self.vargs = Some(vargs)
-    }
-
-    fn add_macros<T>(&mut self, macros: T)
-    where
-        T: IntoIterator<Item = (AstSymbol, CompilerType)>,
-    {
-        self.macros.extend(macros)
-    }
-
-    fn build(self, state: CompilerState) -> Result<Vec<CompilerAction>, CompilerError> {
-        let mut new_env = EnvironmentFrame::new();
-        let arg_count = self.args.len() as u32;
-
-        for arg in self.args {
-            new_env.new_object(arg);
-        }
-
-        let is_vargs = if let Some(vargs) = self.vargs {
-            new_env.new_object(vargs);
-            true
-        } else {
-            false
-        };
-
-        for (name, s_macro) in self.macros {
-            new_env.map.insert(name, s_macro);
-        }
-
-        let parent = replace(
-            self.function,
-            PartialFunction {
-                compiled_code: SchemeFunction::new(arg_count, is_vargs),
-                environment: new_env,
-                parent: None,
-            },
-        );
-
-        let lamada_n = parent.compiled_code.lambda_len();
-
-        self.function.parent = Some(Box::new(parent));
-
-        let mut ret = Vec::new();
-        if let CompilerState::Body = state {
-        } else {
-            ret.push(CompilerAction::EmitAsm {
-                statements: vec![Statement {
-                    arg: lamada_n as u32,
-                    s_type: StatementType::Lamada,
-                }],
-            })
-        }
-        ret.push(CompilerAction::FunctionDone);
-        push_tail_body(self.body, &mut ret)?;
-        Ok(ret)
-    }
-
-    fn build_with_call(
-        self,
-        bindings: Vec<AstNode>,
-        state: CompilerState,
-    ) -> Result<Vec<CompilerAction>, CompilerError> {
-        if self.vargs.is_some() {
-            assert!(self.args.len() <= bindings.len())
-        } else {
-            assert_eq!(self.args.len(), bindings.len())
-        }
-
-        let mut compile_actions = add_call(bindings, state);
-
-        compile_actions.append(&mut self.build(CompilerState::Args)?);
-
-        Ok(compile_actions)
-    }
-
-    fn build_using_letdefs<T>(
-        mut self,
-        defs: T,
-        state: CompilerState,
-    ) -> Result<Vec<CompilerAction>, CompilerError>
-    where
-        T: IntoIterator<Item = LetDef>,
-    {
-        let (bindings, formals): (Vec<_>, Vec<_>) = defs
-            .into_iter()
-            .map(|def| (def.binding, def.formal))
-            .unzip();
-        self.add_args(formals);
-
-        self.build_with_call(bindings, state)
-    }
 }
 
 impl BuiltinMacro {
@@ -211,7 +54,7 @@ impl BuiltinMacro {
                 }
 
                 let raw_formal_list = args.remove(0);
-                let mut lambda_builder = LambdaBuilder::new(function, args);
+                let mut lambda_builder = LambdaBuilder::from_body_exprs(args, state)?;
 
                 let parsed_res = raw_formal_list
                     .into_list()
@@ -263,7 +106,7 @@ impl BuiltinMacro {
                     Err(_) => return Err(CompilerError::SyntaxError),
                 }
 
-                lambda_builder.build(state)
+                Ok(vec![CompilerAction::Lambda(lambda_builder)])
             }
             BuiltinMacro::If => {
                 if args.len() != 2 && args.len() != 3 {
@@ -394,7 +237,7 @@ impl BuiltinMacro {
                         compile_one(expr, state)
                     }
                     None => {
-                        let lambda_builder = LambdaBuilder::new(function, args);
+                        let lambda_builder = LambdaBuilder::from_body_exprs(args, state)?;
                         lambda_builder.build_using_letdefs(defs, state)
                     }
                 }
