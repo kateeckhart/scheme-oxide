@@ -18,7 +18,7 @@
 */
 
 use super::{
-    compile_one, CompilerAction, CompilerError, CompilerState, LambdaBuilder, LetDef,
+    compile_one, CompilerAction, CompilerError, CompilerState, CompilerType, LambdaBuilder, LetDef,
     PartialFunction,
 };
 use crate::ast::{AstList, AstNode, AstSymbol, CoreSymbol};
@@ -216,25 +216,16 @@ impl BuiltinMacro {
                         let mut lambda_def = vec![CoreSymbol::Lambda.into(), formals.into()];
                         lambda_def.append(&mut args);
 
-                        let set_list = vec![
-                            CoreSymbol::Set.into(),
-                            name.clone().into(),
-                            lambda_def.into(),
-                        ];
+                        let binding_list =
+                            vec![vec![name.clone().into(), lambda_def.into()].into()].into();
 
                         let mut func_call = vec![name.clone().into()];
                         func_call.append(&mut bindings);
 
-                        let outer_binding = vec![name.into(), AstNode::from_bool(false)].into();
-                        let expr = vec![
-                            CoreSymbol::Let.into(),
-                            vec![outer_binding].into(),
-                            set_list.into(),
-                            func_call.into(),
-                        ]
-                        .into();
+                        let outer_binding =
+                            vec![CoreSymbol::LetRec.into(), binding_list, func_call.into()].into();
 
-                        compile_one(expr, state)
+                        compile_one(outer_binding, state)
                     }
                     None => {
                         let lambda_builder = LambdaBuilder::from_body_exprs(args, state)?;
@@ -273,7 +264,71 @@ impl BuiltinMacro {
 
                 compile_one(let_list.into(), state)
             }
-            BuiltinMacro::LetRec => unimplemented!(),
+            BuiltinMacro::LetRec => {
+                if args.is_empty() {
+                    return Err(CompilerError::SyntaxError);
+                }
+
+                let defs_or_err = args.remove(0).into_proper_list();
+
+                let raw_defs = if let Ok(def) = defs_or_err {
+                    def
+                } else {
+                    return Err(CompilerError::SyntaxError);
+                };
+
+                let in_defs = LetDef::from_raw_let(raw_defs)?;
+                let mut undef_macros = Vec::new();
+                let mut undef_defs = Vec::new();
+                let mut list_of_sets = Vec::new();
+                let mut tmp_bindings = Vec::new();
+
+                for def in in_defs {
+                    let undef_field = AstSymbol::gen_temp();
+                    let is_def = AstSymbol::gen_temp();
+
+                    let maybe_undef = CompilerType::MaybeUndef {
+                        field: undef_field.clone(),
+                        is_def: is_def.clone(),
+                    };
+
+                    undef_macros.push((def.formal.clone(), maybe_undef));
+
+                    undef_defs.push(LetDef {
+                        formal: undef_field,
+                        binding: AstNode::from_bool(false),
+                    });
+
+                    undef_defs.push(LetDef {
+                        formal: is_def,
+                        binding: AstNode::from_bool(false),
+                    });
+
+                    let tmp_field = AstSymbol::gen_temp();
+                    tmp_bindings.push(LetDef {
+                        formal: tmp_field.clone(),
+                        binding: def.binding,
+                    });
+
+                    list_of_sets.push(
+                        vec![CoreSymbol::Set.into(), def.formal.into(), tmp_field.into()].into(),
+                    );
+                }
+
+                let tmp_scope_builder =
+                    LambdaBuilder::from_body_exprs(list_of_sets.into(), CompilerState::Body)?;
+                let mut tmp_scope = tmp_scope_builder.build_using_letdefs(tmp_bindings)?;
+
+                let in_code_builder = LambdaBuilder::from_body_exprs(args, CompilerState::Tail)?;
+                let in_code = in_code_builder.build_with_call(Vec::new())?;
+
+                let mut outer_body = in_code;
+                outer_body.append(&mut tmp_scope);
+
+                let mut outer_scope_builder = LambdaBuilder::new(outer_body, state);
+                outer_scope_builder.add_macros(undef_macros);
+                outer_scope_builder.build_using_letdefs(undef_defs)
+            }
             BuiltinMacro::And => {
                 let expr = if args.is_empty() {
                     AstNode::from_bool(true)

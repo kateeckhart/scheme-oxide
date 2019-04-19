@@ -81,6 +81,8 @@ impl EnvironmentFrame {
         self.push_builtin_macro(AstSymbol::new("quote"), BuiltinMacro::Quote);
         self.push_builtin_macro(CoreSymbol::Quote.into(), BuiltinMacro::Quote);
         self.push_builtin_macro(AstSymbol::new("cond"), BuiltinMacro::Cond);
+        self.push_builtin_macro(AstSymbol::new("letrec"), BuiltinMacro::LetRec);
+        self.push_builtin_macro(CoreSymbol::LetRec.into(), BuiltinMacro::LetRec);
     }
 
     fn push_builtin_macro(&mut self, name: AstSymbol, s_macro: BuiltinMacro) {
@@ -507,10 +509,7 @@ impl LambdaBuilder {
         Ok(compile_actions)
     }
 
-    fn build_using_letdefs<T>(
-        mut self,
-        defs: T,
-    ) -> Result<Vec<CompilerAction>, CompilerError>
+    fn build_using_letdefs<T>(mut self, defs: T) -> Result<Vec<CompilerAction>, CompilerError>
     where
         T: IntoIterator<Item = LetDef>,
     {
