@@ -238,7 +238,7 @@ impl BuiltinMacro {
                     }
                     None => {
                         let lambda_builder = LambdaBuilder::from_body_exprs(args, state)?;
-                        lambda_builder.build_using_letdefs(defs, state)
+                        lambda_builder.build_using_letdefs(defs)
                     }
                 }
             }

@@ -492,17 +492,15 @@ impl LambdaBuilder {
     fn build_with_call(
         mut self,
         bindings: Vec<AstNode>,
-        state: CompilerState,
     ) -> Result<Vec<CompilerAction>, CompilerError> {
-        self.state = CompilerState::Args;
-
         if self.vargs.is_some() {
             assert!(self.args.len() <= bindings.len())
         } else {
             assert_eq!(self.args.len(), bindings.len())
         }
 
-        let mut compile_actions = add_call(bindings, state);
+        let mut compile_actions = add_call(bindings, self.state);
+        self.state = CompilerState::Args;
 
         compile_actions.push(CompilerAction::Lambda(self));
 
@@ -512,7 +510,6 @@ impl LambdaBuilder {
     fn build_using_letdefs<T>(
         mut self,
         defs: T,
-        state: CompilerState,
     ) -> Result<Vec<CompilerAction>, CompilerError>
     where
         T: IntoIterator<Item = LetDef>,
@@ -523,7 +520,7 @@ impl LambdaBuilder {
             .unzip();
         self.add_args(formals);
 
-        self.build_with_call(bindings, state)
+        self.build_with_call(bindings)
     }
 }
 
