@@ -22,17 +22,13 @@ use crate::interperter::vm::{SchemeFunction, Statement, StatementType};
 use crate::types::*;
 use std::collections::HashMap;
 use std::mem::replace;
-use std::ops::{Deref, DerefMut};
 use std::vec;
 
 mod s_macro;
 use self::s_macro::BuiltinMacro;
 
 fn compile_one<T>(node: AstNode, state: CompilerState) -> Result<Vec<CompilerAction>, T> {
-    Ok(vec![CompilerAction::Compile {
-        code: vec![node].into_iter(),
-        state,
-    }])
+    Ok(vec![CompilerAction::Compile { expr: node, state }])
 }
 
 #[derive(Clone)]
@@ -114,16 +110,15 @@ fn gen_tail_body(mut code: Vec<AstNode>) -> Result<Vec<CompilerAction>, Compiler
     let tail = code.pop().unwrap();
 
     let mut stack = vec![CompilerAction::Compile {
-        code: vec![tail].into_iter(),
+        expr: tail,
         state: CompilerState::Tail,
     }];
 
-    if !code.is_empty() {
-        stack.push(CompilerAction::Compile {
-            code: code.into_iter(),
-            state: CompilerState::Body,
-        })
-    }
+    stack.extend(code.into_iter().rev().map(|expr| CompilerAction::Compile {
+        expr,
+        state: CompilerState::Body,
+    }));
+
     Ok(stack)
 }
 
@@ -226,7 +221,7 @@ impl CompilerType {
                 if let CompilerState::Body = state {
                 } else {
                     ret.push(CompilerAction::Compile {
-                        code: vec![CoreSymbol::GenUnspecified.into()].into_iter(),
+                        expr: CoreSymbol::GenUnspecified.into(),
                         state,
                     });
                 }
@@ -239,7 +234,7 @@ impl CompilerType {
                 });
 
                 ret.push(CompilerAction::Compile {
-                    code: vec![expr].into_iter(),
+                    expr,
                     state: CompilerState::Args,
                 });
 
@@ -318,14 +313,14 @@ pub struct PartialFunction {
 }
 
 impl PartialFunction {
-    fn traverse_macro(&mut self, name: &AstSymbol) -> Result<CompilerType, CompilerError> {
+    fn traverse_macro(&self, name: &AstSymbol) -> Result<CompilerType, CompilerError> {
         let mut function = Some(self);
 
         while let Some(func) = function {
             if let Some(compiler_type) = func.environment.lookup(name) {
                 return Ok(compiler_type);
             } else {
-                function = func.parent.as_mut().map(Box::deref_mut);
+                function = func.parent.as_ref().map(|x| &**x);
             }
         }
 
@@ -350,7 +345,7 @@ impl PartialFunction {
                 return true;
             }
 
-            current_scope_or_none = current_scope.parent.as_ref().map(Deref::deref);
+            current_scope_or_none = current_scope.parent.as_ref().map(|x| &**x);
         }
         false
     }
@@ -526,7 +521,7 @@ impl LambdaBuilder {
 #[derive(Debug)]
 pub enum CompilerAction {
     Compile {
-        code: vec::IntoIter<AstNode>,
+        expr: AstNode,
         state: CompilerState,
     },
     FunctionDone,
@@ -579,13 +574,10 @@ fn add_call(argv: Vec<AstNode>, state: CompilerState) -> Vec<CompilerAction> {
 
     stack.push(CompilerAction::EmitAsm { statements });
 
-    //Compile the arguments to the function
-    if !argv.is_empty() {
-        stack.push(CompilerAction::Compile {
-            code: argv.into_iter(),
-            state: CompilerState::Args,
-        });
-    }
+    stack.extend(argv.into_iter().rev().map(|expr| CompilerAction::Compile {
+        expr,
+        state: CompilerState::Args,
+    }));
 
     stack
 }
@@ -606,84 +598,80 @@ pub fn compile_function(
 
     let mut current_code_block = Vec::new();
 
-    'stack_loop: while let Some(action) = stack.pop() {
+    while let Some(action) = stack.pop() {
         match action {
-            CompilerAction::Compile { mut code, state } => {
-                while let Some(expr) = code.next() {
-                    //Function call/Macro use
-                    let list_or_err = expr.into_proper_list();
-                    let list_parsed_err = match list_or_err {
-                        Ok(mut argv) => {
-                            //Backup the rest of the expressions in this block
-                            stack.push(CompilerAction::Compile { code, state });
+            CompilerAction::Compile { expr, state } => {
+                //Function call/Macro use
+                let parsed_expr = expr
+                    .into_proper_list()
+                    .map(|mut argv| {
+                        let function_object = if !argv.is_empty() {
+                            argv.remove(0)
+                        } else {
+                            return Err(CompilerError::SyntaxError);
+                        };
 
-                            let function_object = if !argv.is_empty() {
-                                argv.remove(0)
-                            } else {
-                                return Err(CompilerError::SyntaxError);
-                            };
+                        let mut function_macro = None;
 
-                            //If the name is a macro, expand the macro
-                            if let Some(function_name) = function_object.to_symbol() {
-                                let calling_function = function.lookup(&function_name)?;
-                                if calling_function.does_expand_as_fn() {
-                                    stack.append(&mut calling_function.expand_as_fn(
-                                        argv,
-                                        &mut function,
-                                        state,
-                                    )?);
-                                    continue 'stack_loop;
-                                }
+                        //If the name is a macro, expand the macro
+                        if let Some(function_name) = function_object.to_symbol() {
+                            let calling_function = function.lookup(&function_name)?;
+                            if calling_function.does_expand_as_fn() {
+                                function_macro = Some(calling_function);
                             }
+                        }
 
+                        if let Some(function_macro) = function_macro {
+                            stack.append(&mut function_macro.expand_as_fn(
+                                argv,
+                                &mut function,
+                                state,
+                            )?);
+                        } else {
                             stack.append(&mut add_call(argv, state));
-
-                            let function_name = vec![function_object];
 
                             //Compile expression that evaluates to the function
                             stack.push(CompilerAction::Compile {
-                                code: function_name.into_iter(),
+                                expr: function_object,
                                 state: CompilerState::Args,
                             });
-
-                            continue 'stack_loop;
                         }
-                        Err(err) => err,
-                    };
-
-                    let sym_parsed_err = match list_parsed_err.into_symbol() {
-                        Ok(ident_name) => {
+                        Ok(())
+                    })
+                    .or_else(|expr| {
+                        expr.into_symbol().map(|ident_name| {
                             let ident = function.lookup(&ident_name)?;
                             if ident.does_expand_as_self() {
-                                stack.push(CompilerAction::Compile { code, state });
-
                                 stack.append(&mut ident.expand_as_self(
                                     &ident_name,
                                     &mut function,
                                     state,
                                 )?);
-                                continue 'stack_loop;
+                                Ok(())
+                            } else {
+                                Err(CompilerError::SyntaxError)
                             }
-
-                            return Err(CompilerError::SyntaxError);
+                        })
+                    })
+                    .unwrap_or_else(|expr| {
+                        if expr.is_improper_list() {
+                            Err(CompilerError::SyntaxError)
+                        } else {
+                            if let CompilerState::Body = state {
+                            } else {
+                                current_code_block.push(Statement {
+                                    s_type: StatementType::Literal,
+                                    arg: function.compiled_code.literal_len() as u32,
+                                });
+                                function.compiled_code.new_literal(expr.to_datum());
+                            }
+                            Ok(())
                         }
-                        Err(expr) => expr,
-                    };
+                    });
 
-                    if sym_parsed_err.is_improper_list() {
-                        return Err(CompilerError::SyntaxError);
-                    }
-
-                    if let CompilerState::Body = state {
-                    } else {
-                        current_code_block.push(Statement {
-                            s_type: StatementType::Literal,
-                            arg: function.compiled_code.literal_len() as u32,
-                        });
-                        function
-                            .compiled_code
-                            .new_literal(sym_parsed_err.to_datum());
-                    }
+                match parsed_expr {
+                    Ok(()) => (),
+                    Err(err) => return Err(err),
                 }
             }
             CompilerAction::PrependAsm { mut statements } => {
@@ -700,8 +688,6 @@ pub fn compile_function(
                     let child_code = function.compiled_code;
                     parent.compiled_code.new_lambda(child_code);
                     function = *parent;
-                } else {
-                    break 'stack_loop;
                 }
             }
             CompilerAction::Lambda(builder) => {
@@ -722,7 +708,7 @@ pub fn compile_function(
                     state,
                 });
                 stack.push(CompilerAction::Compile {
-                    code: vec![true_expr].into_iter(),
+                    expr: true_expr,
                     state,
                 });
                 current_code_block = Vec::new();
@@ -737,7 +723,7 @@ pub fn compile_function(
                     true_asm: current_code_block,
                 });
                 stack.push(CompilerAction::Compile {
-                    code: vec![false_expr].into_iter(),
+                    expr: false_expr,
                     state,
                 });
                 current_code_block = Vec::new();

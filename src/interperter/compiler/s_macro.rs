@@ -129,7 +129,7 @@ impl BuiltinMacro {
                         state,
                     },
                     CompilerAction::Compile {
-                        code: vec![test].into_iter(),
+                        expr: test,
                         state: CompilerState::Args,
                     },
                 ])
@@ -316,7 +316,7 @@ impl BuiltinMacro {
                 }
 
                 let tmp_scope_builder =
-                    LambdaBuilder::from_body_exprs(list_of_sets.into(), CompilerState::Body)?;
+                    LambdaBuilder::from_body_exprs(list_of_sets, CompilerState::Body)?;
                 let mut tmp_scope = tmp_scope_builder.build_using_letdefs(tmp_bindings)?;
 
                 let in_code_builder = LambdaBuilder::from_body_exprs(args, CompilerState::Tail)?;
