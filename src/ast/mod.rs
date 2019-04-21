@@ -19,12 +19,7 @@
 
 use crate::types::pair::ListFactory;
 use crate::types::*;
-use std::cell::Cell;
-use std::thread::{self, ThreadId};
-
-thread_local! {
-    static TEMP_COUNT: Cell<u64> = Cell::new(0);
-}
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CoreSymbol {
@@ -64,7 +59,7 @@ impl CoreSymbol {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum AstSymbolInner {
     Core(CoreSymbol),
-    Temp((u64, ThreadId)),
+    Temp(u64),
     Defined(String),
 }
 
@@ -77,22 +72,17 @@ impl AstSymbol {
     }
 
     pub fn gen_temp() -> AstSymbol {
-        let count = TEMP_COUNT.with(|count| {
-            let ret = count.get();
-            count.set(ret + 1);
-            if ret == u64::max_value() {
-                panic!("Temporary count overflowed!")
-            }
-            ret
-        });
+        static TEMP_COUNT: AtomicU64 = AtomicU64::new(0);
 
-        AstSymbol(AstSymbolInner::Temp((count, thread::current().id())))
+        let count = TEMP_COUNT.fetch_add(1, Ordering::Relaxed);
+
+        AstSymbol(AstSymbolInner::Temp(count))
     }
 
     pub fn get_name(&self) -> String {
         match &self.0 {
             AstSymbolInner::Core(core) => core.get_name().to_string(),
-            AstSymbolInner::Temp((local_id, _)) => format!("$temp$local_id{}", local_id),
+            AstSymbolInner::Temp(id) => format!("$temp$id{}", id),
             AstSymbolInner::Defined(name) => name.clone(),
         }
     }
