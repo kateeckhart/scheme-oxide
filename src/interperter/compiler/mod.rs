@@ -130,142 +130,154 @@ enum CompilerType {
 }
 
 impl CompilerType {
-    fn does_expand_as_fn(&self) -> bool {
+    fn get_expand_as_fn_fn<'a>(
+        &'a self,
+    ) -> Option<
+        impl Fn(
+                Vec<AstNode>,
+                &mut PartialFunction,
+                CompilerState,
+            ) -> Result<Vec<CompilerAction>, CompilerError>
+            + 'a,
+    > {
         match self {
-            CompilerType::BuiltinMacro(_) => true,
-            _ => false,
+            CompilerType::BuiltinMacro(_) => (),
+            _ => return None,
         }
+
+        Some(
+            move |args, function: &mut PartialFunction, state| match self {
+                CompilerType::BuiltinMacro(m) => m.expand(args, function, state),
+                _ => unreachable!(),
+            },
+        )
     }
 
-    fn expand_as_fn(
-        &self,
-        args: Vec<AstNode>,
-        function: &mut PartialFunction,
-        state: CompilerState,
-    ) -> Result<Vec<CompilerAction>, CompilerError> {
+    fn get_expand_as_self_fn<'a>(
+        &'a self,
+    ) -> Option<
+        impl Fn(
+                &AstSymbol,
+                &mut PartialFunction,
+                CompilerState,
+            ) -> Result<Vec<CompilerAction>, CompilerError>
+            + 'a,
+    > {
         match self {
-            CompilerType::BuiltinMacro(m) => m.expand(args, function, state),
-            _ => panic!(),
+            CompilerType::RuntimeLocation(_) => (),
+            CompilerType::MaybeUndef { .. } => (),
+            _ => return None,
         }
+
+        Some(
+            move |name: &AstSymbol, _function: &mut PartialFunction, state| match self {
+                CompilerType::RuntimeLocation(ident) => {
+                    if let CompilerState::Body = state {
+                        Ok(Vec::new())
+                    } else {
+                        Ok(vec![CompilerAction::EmitAsm {
+                            statements: vec![Statement {
+                                s_type: StatementType::Get,
+                                arg: *ident,
+                            }],
+                        }])
+                    }
+                }
+                CompilerType::MaybeUndef { field, is_def } => {
+                    let quoted_name = vec![CoreSymbol::Quote.into(), name.clone().into()];
+                    let error_list = vec![
+                        CoreSymbol::Error.into(),
+                        quoted_name.into(),
+                        AstNode::from_string("Tried to read from undef.".to_string()),
+                    ];
+                    let if_list = vec![
+                        CoreSymbol::If.into(),
+                        is_def.clone().into(),
+                        field.clone().into(),
+                        error_list.into(),
+                    ];
+
+                    compile_one(if_list.into(), state)
+                }
+                _ => unreachable!(),
+            },
+        )
     }
 
-    fn does_expand_as_self(&self) -> bool {
+    fn get_expand_as_set_fn<'a>(
+        &'a self,
+    ) -> Option<
+        impl Fn(
+                Vec<AstNode>,
+                &mut PartialFunction,
+                CompilerState,
+            ) -> Result<Vec<CompilerAction>, CompilerError>
+            + 'a,
+    > {
         match self {
-            CompilerType::RuntimeLocation(_) => true,
-            CompilerType::MaybeUndef { .. } => true,
-            _ => false,
+            CompilerType::RuntimeLocation(_) => (),
+            CompilerType::MaybeUndef { .. } => (),
+            _ => return None,
         }
-    }
 
-    fn expand_as_self(
-        &self,
-        name: &AstSymbol,
-        _function: &mut PartialFunction,
-        state: CompilerState,
-    ) -> Result<Vec<CompilerAction>, CompilerError> {
-        match self {
-            CompilerType::RuntimeLocation(ident) => {
-                if let CompilerState::Body = state {
-                    Ok(Vec::new())
-                } else {
-                    Ok(vec![CompilerAction::EmitAsm {
+        Some(
+            move |mut args: Vec<AstNode>, _function: &mut PartialFunction, state| match self {
+                CompilerType::RuntimeLocation(var_id) => {
+                    if args.len() != 1 {
+                        return Err(CompilerError::SyntaxError);
+                    }
+                    let expr = args.pop().unwrap();
+                    let mut ret = Vec::new();
+
+                    if let CompilerState::Body = state {
+                    } else {
+                        ret.push(CompilerAction::Compile {
+                            expr: CoreSymbol::GenUnspecified.into(),
+                            state,
+                        });
+                    }
+
+                    ret.push(CompilerAction::EmitAsm {
                         statements: vec![Statement {
-                            s_type: StatementType::Get,
-                            arg: *ident,
+                            s_type: StatementType::Set,
+                            arg: *var_id,
                         }],
-                    }])
-                }
-            }
-            CompilerType::MaybeUndef { field, is_def } => {
-                let quoted_name = vec![CoreSymbol::Quote.into(), name.clone().into()];
-                let error_list = vec![
-                    CoreSymbol::Error.into(),
-                    quoted_name.into(),
-                    AstNode::from_string("Tried to read from undef.".to_string()),
-                ];
-                let if_list = vec![
-                    CoreSymbol::If.into(),
-                    is_def.clone().into(),
-                    field.clone().into(),
-                    error_list.into(),
-                ];
-
-                compile_one(if_list.into(), state)
-            }
-            _ => panic!(),
-        }
-    }
-
-    fn does_expand_as_set(&self) -> bool {
-        match self {
-            CompilerType::RuntimeLocation(_) => true,
-            CompilerType::MaybeUndef { .. } => true,
-            _ => false,
-        }
-    }
-
-    fn expand_as_set(
-        &self,
-        mut args: Vec<AstNode>,
-        _function: &mut PartialFunction,
-        state: CompilerState,
-    ) -> Result<Vec<CompilerAction>, CompilerError> {
-        match self {
-            CompilerType::RuntimeLocation(var_id) => {
-                if args.len() != 1 {
-                    return Err(CompilerError::SyntaxError);
-                }
-                let expr = args.pop().unwrap();
-                let mut ret = Vec::new();
-
-                if let CompilerState::Body = state {
-                } else {
-                    ret.push(CompilerAction::Compile {
-                        expr: CoreSymbol::GenUnspecified.into(),
-                        state,
                     });
+
+                    ret.push(CompilerAction::Compile {
+                        expr,
+                        state: CompilerState::Args,
+                    });
+
+                    Ok(ret)
                 }
+                CompilerType::MaybeUndef { field, is_def } => {
+                    if args.len() != 1 {
+                        return Err(CompilerError::SyntaxError);
+                    }
 
-                ret.push(CompilerAction::EmitAsm {
-                    statements: vec![Statement {
-                        s_type: StatementType::Set,
-                        arg: *var_id,
-                    }],
-                });
+                    let set_is_def = vec![
+                        CoreSymbol::Set.into(),
+                        is_def.clone().into(),
+                        AstNode::from_bool(true),
+                    ];
+                    let set_field = vec![
+                        CoreSymbol::Set.into(),
+                        field.clone().into(),
+                        args.pop().unwrap(),
+                    ];
 
-                ret.push(CompilerAction::Compile {
-                    expr,
-                    state: CompilerState::Args,
-                });
+                    let begin_list = vec![
+                        CoreSymbol::Begin.into(),
+                        set_is_def.into(),
+                        set_field.into(),
+                    ];
 
-                Ok(ret)
-            }
-            CompilerType::MaybeUndef { field, is_def } => {
-                if args.len() != 1 {
-                    return Err(CompilerError::SyntaxError);
+                    compile_one(begin_list.into(), state)
                 }
-
-                let set_is_def = vec![
-                    CoreSymbol::Set.into(),
-                    is_def.clone().into(),
-                    AstNode::from_bool(true),
-                ];
-                let set_field = vec![
-                    CoreSymbol::Set.into(),
-                    field.clone().into(),
-                    args.pop().unwrap(),
-                ];
-
-                let begin_list = vec![
-                    CoreSymbol::Begin.into(),
-                    set_is_def.into(),
-                    set_field.into(),
-                ];
-
-                compile_one(begin_list.into(), state)
-            }
-            _ => panic!(),
-        }
+                _ => unreachable!(),
+            },
+        )
     }
 
     fn be_captured(self, name: &AstSymbol, in_function: &mut PartialFunction) -> Self {
@@ -611,22 +623,19 @@ pub fn compile_function(
                             return Err(CompilerError::SyntaxError);
                         };
 
-                        let mut function_macro = None;
+                        let calling_function;
+                        let mut expand_as_fn = None;
 
                         //If the name is a macro, expand the macro
                         if let Some(function_name) = function_object.to_symbol() {
-                            let calling_function = function.lookup(&function_name)?;
-                            if calling_function.does_expand_as_fn() {
-                                function_macro = Some(calling_function);
+                            calling_function = function.lookup(&function_name)?;
+                            if let Some(expand) = calling_function.get_expand_as_fn_fn() {
+                                expand_as_fn = Some(expand);
                             }
                         }
 
-                        if let Some(function_macro) = function_macro {
-                            stack.append(&mut function_macro.expand_as_fn(
-                                argv,
-                                &mut function,
-                                state,
-                            )?);
+                        if let Some(expand_as_fn) = expand_as_fn.take() {
+                            stack.append(&mut expand_as_fn(argv, &mut function, state)?);
                         } else {
                             stack.append(&mut add_call(argv, state));
 
@@ -636,13 +645,15 @@ pub fn compile_function(
                                 state: CompilerState::Args,
                             });
                         }
+
                         Ok(())
                     })
                     .or_else(|expr| {
                         expr.into_symbol().map(|ident_name| {
                             let ident = function.lookup(&ident_name)?;
-                            if ident.does_expand_as_self() {
-                                stack.append(&mut ident.expand_as_self(
+                            let expand_as_self_or_none = ident.get_expand_as_self_fn();
+                            if let Some(expand_as_self) = expand_as_self_or_none {
+                                stack.append(&mut expand_as_self(
                                     &ident_name,
                                     &mut function,
                                     state,

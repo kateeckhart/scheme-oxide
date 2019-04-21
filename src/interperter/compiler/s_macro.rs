@@ -146,8 +146,9 @@ impl BuiltinMacro {
                 };
 
                 let compiler_type = function.lookup(&var)?;
-                if compiler_type.does_expand_as_set() {
-                    compiler_type.expand_as_set(args, function, state)
+                let expand_as_set_or_none = compiler_type.get_expand_as_set_fn();
+                if let Some(expand_as_set) = expand_as_set_or_none {
+                    expand_as_set(args, function, state)
                 } else {
                     Err(CompilerError::SyntaxError)
                 }
