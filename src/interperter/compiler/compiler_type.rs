@@ -31,15 +31,15 @@ pub enum CompilerType {
 }
 
 impl CompilerType {
-    pub fn get_expand_as_fn_fn<'a>(
-        &'a self,
+    pub fn get_expand_as_fn_fn(
+        &self,
     ) -> Option<
         impl Fn(
                 Vec<AstNode>,
                 &mut PartialFunction,
                 CompilerState,
             ) -> Result<Vec<CompilerAction>, CompilerError>
-            + 'a,
+            + '_,
     > {
         match self {
             CompilerType::BuiltinMacro(_) => (),
@@ -54,15 +54,15 @@ impl CompilerType {
         )
     }
 
-    pub fn get_expand_as_self_fn<'a>(
-        &'a self,
+    pub fn get_expand_as_self_fn(
+        &self,
     ) -> Option<
         impl Fn(
                 &AstSymbol,
                 &mut PartialFunction,
                 CompilerState,
             ) -> Result<Vec<CompilerAction>, CompilerError>
-            + 'a,
+            + '_,
     > {
         match self {
             CompilerType::RuntimeLocation(_) => (),
@@ -105,15 +105,15 @@ impl CompilerType {
         )
     }
 
-    pub fn get_expand_as_set_fn<'a>(
-        &'a self,
+    pub fn get_expand_as_set_fn(
+        &self,
     ) -> Option<
         impl Fn(
                 Vec<AstNode>,
                 &mut PartialFunction,
                 CompilerState,
             ) -> Result<Vec<CompilerAction>, CompilerError>
-            + 'a,
+            + '_,
     > {
         match self {
             CompilerType::RuntimeLocation(_) => (),
