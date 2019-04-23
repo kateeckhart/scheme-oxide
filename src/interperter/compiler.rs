@@ -433,14 +433,12 @@ pub fn compile_function(
                         let mut expand_as_fn = None;
 
                         //If the name is a macro, expand the macro
-                        if let Some(function_name) = function_object.to_symbol() {
-                            calling_function = function.lookup(&function_name)?;
-                            if let Some(expand) = calling_function.get_expand_as_fn_fn() {
-                                expand_as_fn = Some(expand);
-                            }
+                        if let Some(function_name) = function_object.as_symbol() {
+                            calling_function = function.lookup(function_name)?;
+                            expand_as_fn = calling_function.get_expand_as_fn_fn();
                         }
 
-                        if let Some(expand_as_fn) = expand_as_fn.take() {
+                        if let Some(expand_as_fn) = expand_as_fn {
                             stack.append(&mut expand_as_fn(argv, &mut function, state)?);
                         } else {
                             stack.append(&mut add_call(argv, state));

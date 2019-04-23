@@ -97,7 +97,7 @@ impl From<CoreSymbol> for AstSymbol {
 #[derive(Clone, Debug, PartialEq)]
 enum ListType {
     Proper,
-    Improper(Box<AstNode>),
+    Improper(AstNodeNonList),
 }
 
 impl ListType {
@@ -112,7 +112,7 @@ impl ListType {
     fn to_datum(&self) -> SchemeType {
         match self {
             ListType::Proper => get_empty_list().into(),
-            ListType::Improper(node) => node.to_datum(),
+            ListType::Improper(node) => AstNode::from_non_list(node.clone()).to_datum(),
         }
     }
 }
@@ -162,7 +162,7 @@ impl AstList {
         if let ListType::Improper(terminator) = self.list_type {
             Ok(ImproperList {
                 nodes: self.nodes,
-                terminator: *terminator,
+                terminator: AstNode::from_non_list(terminator),
             })
         } else {
             Err(self)
@@ -210,51 +210,64 @@ impl AstListBuilder {
     }
 
     pub fn build_with_tail(mut self, node: AstNode) -> Option<AstList> {
-        if let AstNodeInner::List(mut list) = node.0 {
-            if self.nodes.is_empty() && list.is_improper_list() {
-                return None;
+        match node.0 {
+            AstNodeInner::List(mut list) => {
+                if self.nodes.is_empty() && list.is_improper_list() {
+                    return None;
+                }
+
+                self.nodes.append(&mut list.nodes);
+
+                Some(self.build_with_type(list.list_type))
             }
-
-            self.nodes.append(&mut list.nodes);
-
-            Some(self.build_with_type(list.list_type))
-        } else {
-            Some(self.build_with_type(ListType::Improper(Box::new(node))))
+            AstNodeInner::NonList(node) => Some(self.build_with_type(ListType::Improper(node))),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum AstNodeInner {
+enum AstNodeNonList {
     Number(i64),
     Symbol(AstSymbol),
     String(String),
-    List(AstList),
     Bool(bool),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum AstNodeInner {
+    List(AstList),
+    NonList(AstNodeNonList),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AstNode(AstNodeInner);
 
+use AstNodeInner::*;
+use AstNodeNonList::{Bool, Number, String as SchemeString, Symbol};
+
 impl AstNode {
+    fn from_non_list(non_list: AstNodeNonList) -> AstNode {
+        AstNode(NonList(non_list))
+    }
+
     pub fn from_number(number: i64) -> AstNode {
-        AstNode(AstNodeInner::Number(number))
+        Self::from_non_list(Number(number))
     }
 
     pub fn from_string(string: String) -> AstNode {
-        AstNode(AstNodeInner::String(string))
+        Self::from_non_list(SchemeString(string))
     }
 
     pub fn from_bool(boolean: bool) -> AstNode {
-        AstNode(AstNodeInner::Bool(boolean))
+        Self::from_non_list(Bool(boolean))
     }
 
     pub fn to_datum(&self) -> SchemeType {
         match &self.0 {
-            AstNodeInner::Number(x) => SchemeType::Number(*x),
-            AstNodeInner::Symbol(sym) => new_symbol(sym.get_name()).into(),
-            AstNodeInner::String(stri) => SchemeType::String(stri.clone().parse().unwrap()),
-            AstNodeInner::List(list) => {
+            NonList(Number(x)) => SchemeType::Number(*x),
+            NonList(Symbol(sym)) => new_symbol(sym.get_name()).into(),
+            NonList(SchemeString(stri)) => SchemeType::String(stri.clone().parse().unwrap()),
+            List(list) => {
                 let mut builder = ListFactory::new(false);
 
                 for node in list.nodes.iter() {
@@ -263,12 +276,12 @@ impl AstNode {
 
                 builder.build_with_tail(list.list_type.to_datum()).into()
             }
-            AstNodeInner::Bool(is_true) => (*is_true).into(),
+            NonList(Bool(is_true)) => (*is_true).into(),
         }
     }
 
     pub fn as_list(&self) -> Option<&AstList> {
-        if let AstNodeInner::List(list) = &self.0 {
+        if let List(list) = &self.0 {
             Some(list)
         } else {
             None
@@ -276,15 +289,23 @@ impl AstNode {
     }
 
     pub fn as_proper_list(&self) -> Option<&[AstNode]> {
-        if let AstNodeInner::List(list) = &self.0 {
+        if let List(list) = &self.0 {
             list.as_proper_list()
         } else {
             None
         }
     }
 
+    pub fn as_symbol(&self) -> Option<&AstSymbol> {
+        if let NonList(Symbol(sym)) = &self.0 {
+            Some(sym)
+        } else {
+            None
+        }
+    }
+
     pub fn into_symbol(self) -> Result<AstSymbol, AstNode> {
-        if let AstNodeInner::Symbol(sym) = self.0 {
+        if let NonList(Symbol(sym)) = self.0 {
             Ok(sym)
         } else {
             Err(self)
@@ -292,7 +313,7 @@ impl AstNode {
     }
 
     pub fn into_list(self) -> Result<AstList, AstNode> {
-        if let AstNodeInner::List(list) = self.0 {
+        if let List(list) = self.0 {
             Ok(list)
         } else {
             Err(self)
@@ -302,16 +323,7 @@ impl AstNode {
     pub fn into_proper_list(self) -> Result<Vec<AstNode>, AstNode> {
         let list = self.into_list()?;
 
-        list.into_proper_list()
-            .map_err(|list| AstNode(AstNodeInner::List(list)))
-    }
-
-    pub fn to_symbol(&self) -> Option<AstSymbol> {
-        if let AstNodeInner::Symbol(sym) = &self.0 {
-            Some(sym.clone())
-        } else {
-            None
-        }
+        list.into_proper_list().map_err(|list| AstNode(List(list)))
     }
 
     pub fn is_improper_list(&self) -> bool {
@@ -332,7 +344,7 @@ impl From<CoreSymbol> for AstNode {
 
 impl From<AstSymbol> for AstNode {
     fn from(sym: AstSymbol) -> AstNode {
-        AstNode(AstNodeInner::Symbol(sym))
+        AstNode::from_non_list(Symbol(sym))
     }
 }
 
