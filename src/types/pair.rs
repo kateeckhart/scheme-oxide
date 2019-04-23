@@ -1,5 +1,5 @@
 /*
-    Copyright 2018 Alexander Eckhart
+    Copyright 2019 Alexander Eckhart
 
     This file is part of scheme-oxide.
 
