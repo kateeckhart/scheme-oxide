@@ -52,6 +52,14 @@ fn gen_unspecified() -> SchemeType {
     get_false().into()
 }
 
+fn assert_args<T>(args: &[T], argc: usize, is_vargs: bool) -> Result<(), RuntimeError> {
+    if (is_vargs && args.len() < argc) || (!is_vargs && args.len() != argc) {
+        Err(RuntimeError::ArgError)
+    } else {
+        Ok(())
+    }
+}
+
 impl BuiltinFunction {
     pub fn call_with_stack(
         self,
@@ -77,7 +85,7 @@ impl BuiltinFunction {
                 if args.len() == 1 {
                     Ok(Some(SchemeType::Number(-args[0].to_number()?)))
                 } else if args.len() > 1 {
-                    let mut iter = args.drain(..);
+                    let mut iter = args.into_iter();
                     let mut difference = iter.next().unwrap().to_number()?;
                     for number in iter {
                         difference -= number.to_number()?
@@ -88,10 +96,9 @@ impl BuiltinFunction {
                 }
             }
             BuiltinFunction::Compare { invert, mode } => {
-                if args.len() < 2 {
-                    return Err(RuntimeError::ArgError);
-                }
-                let mut iter = args.drain(..);
+                assert_args(&args, 2, true)?;
+
+                let mut iter = args.into_iter();
                 let mut current = iter.next().unwrap().to_number()?;
                 let mut ret = get_true();
                 for raw_num in iter {
@@ -106,16 +113,12 @@ impl BuiltinFunction {
                 Ok(Some(ret.into()))
             }
             BuiltinFunction::Eqv => {
-                if args.len() != 2 {
-                    return Err(RuntimeError::ArgError);
-                }
+                assert_args(&args, 2, false)?;
 
                 Ok(Some((args[0] == args[1]).into()))
             }
             BuiltinFunction::Quotient | BuiltinFunction::Remainder => {
-                if args.len() != 2 {
-                    return Err(RuntimeError::ArgError);
-                }
+                assert_args(&args, 2, false)?;
 
                 let b = args.pop().unwrap().to_number()?;
                 let a = args.pop().unwrap().to_number()?;
@@ -136,9 +139,7 @@ impl BuiltinFunction {
             BuiltinFunction::GenUnspecified => Ok(Some(gen_unspecified())),
             BuiltinFunction::Error => Err(RuntimeError::AssertFailed),
             BuiltinFunction::IsObject => {
-                if args.len() != 1 {
-                    return Err(RuntimeError::ArgError);
-                }
+                assert_args(&args, 1, false)?;
 
                 let object = args.pop().unwrap();
                 Ok(Some(
@@ -151,9 +152,7 @@ impl BuiltinFunction {
                 ))
             }
             BuiltinFunction::IsNumber => {
-                if args.len() != 1 {
-                    return Err(RuntimeError::ArgError);
-                }
+                assert_args(&args, 1, false)?;
 
                 let object = args.pop().unwrap();
                 Ok(Some(
@@ -166,9 +165,7 @@ impl BuiltinFunction {
                 ))
             }
             BuiltinFunction::IsChar => {
-                if args.len() != 1 {
-                    return Err(RuntimeError::ArgError);
-                }
+                assert_args(&args, 1, false)?;
 
                 let object = args.pop().unwrap();
                 Ok(Some(
@@ -181,9 +178,7 @@ impl BuiltinFunction {
                 ))
             }
             BuiltinFunction::IsString => {
-                if args.len() != 1 {
-                    return Err(RuntimeError::ArgError);
-                }
+                assert_args(&args, 1, false)?;
 
                 let object = args.pop().unwrap();
                 Ok(Some(
@@ -196,17 +191,13 @@ impl BuiltinFunction {
                 ))
             }
             BuiltinFunction::GetTypeId => {
-                if args.len() != 1 {
-                    return Err(RuntimeError::ArgError);
-                }
+                assert_args(&args, 1, false)?;
 
                 let object = args.pop().unwrap().into_object()?;
                 Ok(Some(object.get_type_id()))
             }
             BuiltinFunction::GetField => {
-                if args.len() != 2 {
-                    return Err(RuntimeError::ArgError);
-                }
+                assert_args(&args, 2, false)?;
 
                 let index = args.pop().unwrap().to_index()?;
                 let object = args.pop().unwrap().into_object()?;
@@ -217,9 +208,7 @@ impl BuiltinFunction {
                     .map(Some)
             }
             BuiltinFunction::SetField => {
-                if args.len() != 3 {
-                    return Err(RuntimeError::ArgError);
-                }
+                assert_args(&args, 3, false)?;
 
                 let field_value = args.pop().unwrap();
                 let index = args.pop().unwrap().to_index()?;
@@ -231,9 +220,7 @@ impl BuiltinFunction {
                     .map_err(|_| RuntimeError::OutOfBounds)
             }
             BuiltinFunction::GetChar => {
-                if args.len() != 2 {
-                    return Err(RuntimeError::ArgError);
-                }
+                assert_args(&args, 2, false)?;
 
                 let index = args.pop().unwrap().to_index()?;
                 let string = args.pop().unwrap().into_string()?;
@@ -244,9 +231,7 @@ impl BuiltinFunction {
                     .map(|c| Some(SchemeType::Char(c)))
             }
             BuiltinFunction::SetChar => {
-                if args.len() != 3 {
-                    return Err(RuntimeError::ArgError);
-                }
+                assert_args(&args, 3, false)?;
 
                 let c = args.pop().unwrap().to_char()?;
                 let index = args.pop().unwrap().to_index()?;
@@ -258,9 +243,7 @@ impl BuiltinFunction {
                     .map_err(|_| RuntimeError::AssertFailed)
             }
             BuiltinFunction::NewObject => {
-                if args.is_empty() {
-                    return Err(RuntimeError::ArgError);
-                }
+                assert_args(&args, 1, true)?;
 
                 let type_id = args.remove(0);
                 Ok(Some(SchemeObject::new(type_id, args).into()))
@@ -281,18 +264,14 @@ impl BuiltinFunction {
                 Ok(Some(SchemeString::new(size, fill).into()))
             }
             BuiltinFunction::StringLen => {
-                if args.len() != 1 {
-                    return Err(RuntimeError::ArgError);
-                }
+                assert_args(&args, 1, false)?;
 
                 let string = args.pop().unwrap().into_string()?;
 
                 Ok(Some(string.len().into()))
             }
             BuiltinFunction::WriteChar => {
-                if args.len() != 1 {
-                    return Err(RuntimeError::ArgError);
-                }
+                assert_args(&args, 1, false)?;
 
                 let c = args.pop().unwrap().to_char()?;
 
