@@ -81,6 +81,7 @@ impl EnvironmentFrame {
         self.push_builtin_macro(AstSymbol::new("cond"), BuiltinMacro::Cond);
         self.push_builtin_macro(AstSymbol::new("letrec"), BuiltinMacro::LetRec);
         self.push_builtin_macro(CoreSymbol::LetRec.into(), BuiltinMacro::LetRec);
+        self.push_builtin_macro(CoreSymbol::BeginProgram.into(), BuiltinMacro::BeginProgram);
     }
 
     fn push_builtin_macro(&mut self, name: AstSymbol, s_macro: BuiltinMacro) {
@@ -402,11 +403,15 @@ fn add_call(argv: Vec<AstNode>, state: CompilerState) -> Vec<CompilerAction> {
 
 pub fn compile_function(
     base_environment: &EnvironmentFrame,
-    code: Vec<AstNode>,
+    expr: AstNode,
 ) -> Result<SchemeFunction, CompilerError> {
-    let mut stack = vec![CompilerAction::FunctionDone];
-
-    stack.append(&mut gen_tail_body(code)?);
+    let mut stack = vec![
+        CompilerAction::FunctionDone,
+        CompilerAction::Compile {
+            expr,
+            state: CompilerState::Tail,
+        },
+    ];
 
     let mut function = PartialFunction {
         compiled_code: SchemeFunction::default(),

@@ -17,6 +17,7 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use crate::ast::{AstNode, CoreSymbol};
 use crate::parser::{Parser, ParserError};
 use crate::types::pair::ListFactory;
 use crate::types::*;
@@ -35,23 +36,12 @@ use builtin::BuiltinFunction;
 mod vm;
 use vm::{run_vm, SchemeFunction, StackFrame};
 
-fn eval_with_environment(string: &str, env: &BaseEnvironment) -> Result<SchemeType, RuntimeError> {
-    let parser = Parser::new(string);
-    let mut nodes = Vec::new();
-    for object in parser {
-        nodes.push(object?)
-    }
-
-    if nodes.is_empty() {
-        return eval("($gen_unspecified)");
-    }
-
+fn eval_with_environment(
+    nodes: AstNode,
+    env: &BaseEnvironment,
+) -> Result<SchemeType, RuntimeError> {
     let function = compiler::compile_function(&env.frame, nodes)?;
-    let env_vars = env
-        .bounded
-        .iter()
-        .map(|x| Rc::new(RefCell::new(x.clone())))
-        .collect::<Vec<_>>();
+    let env_vars = env.bounded.clone();
 
     FunctionRef(FunctionRefInner::Derived(DerivedFunctionRef {
         function: Rc::new(function),
@@ -61,7 +51,10 @@ fn eval_with_environment(string: &str, env: &BaseEnvironment) -> Result<SchemeTy
 }
 
 pub fn eval(string: &str) -> Result<SchemeType, RuntimeError> {
-    MAIN_ENVIRONMENT.with(|env| eval_with_environment(string, &env))
+    let parsed_nodes: Result<Vec<_>, _> = Parser::new(string).collect();
+    let nodes = vec![CoreSymbol::BeginProgram.into(), parsed_nodes?.into()];
+
+    MAIN_ENVIRONMENT.with(|env| eval_with_environment(nodes.into(), &env))
 }
 
 #[derive(Debug)]

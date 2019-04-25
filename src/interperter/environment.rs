@@ -22,12 +22,15 @@ use super::{
     FunctionRefInner, RuntimeError,
 };
 use crate::ast::{AstSymbol, CoreSymbol};
+use crate::parser::Parser;
 use crate::types::*;
+use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::rc::Rc;
 
 pub struct BaseEnvironment {
     pub frame: EnvironmentFrame,
-    pub bounded: Vec<SchemeType>,
+    pub bounded: Vec<Rc<RefCell<SchemeType>>>,
 }
 
 impl BaseEnvironment {
@@ -40,7 +43,7 @@ impl BaseEnvironment {
 
     fn push_object(&mut self, name: AstSymbol, object: SchemeType) {
         self.frame.new_object(name);
-        self.bounded.push(object)
+        self.bounded.push(Rc::new(RefCell::new(object)))
     }
 
     fn push_builtin_function(&mut self, name: AstSymbol, function: BuiltinFunction) {
@@ -51,7 +54,7 @@ impl BaseEnvironment {
     }
 
     fn push_eval(&mut self, name: AstSymbol, expressions: &str) -> Result<(), RuntimeError> {
-        let object = eval_with_environment(expressions, self)?;
+        let object = eval_with_environment(Parser::new(expressions).next().unwrap()?, self)?;
 
         self.push_object(name, object);
         Ok(())

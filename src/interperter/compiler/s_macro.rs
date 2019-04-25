@@ -38,6 +38,7 @@ pub enum BuiltinMacro {
     Or,
     And,
     Cond,
+    BeginProgram,
 }
 
 impl BuiltinMacro {
@@ -427,6 +428,31 @@ impl BuiltinMacro {
                 }
 
                 compile_one(else_clase.into(), state)
+            }
+            BuiltinMacro::BeginProgram => {
+                if args.len() != 1 {
+                    return Err(CompilerError::SyntaxError);
+                }
+
+                let code = if let Ok(code) = args.pop().unwrap().into_proper_list() {
+                    code
+                } else {
+                    return Err(CompilerError::SyntaxError);
+                };
+
+                let lambda_builder = LambdaBuilder::from_body_exprs(code, state)?;
+
+                lambda_builder.build_using_letdefs(function.environment.map.iter().filter_map(
+                    |(var, value)| match value {
+                        //Copy all runtime variables to prevent the derived forms that come with
+                        //scheme-oxide from having undefined behavior if they are changed.
+                        CompilerType::RuntimeLocation(_) => Some(LetDef {
+                            formal: var.clone(),
+                            binding: var.clone().into(),
+                        }),
+                        _ => None,
+                    },
+                ))
             }
         }
     }

@@ -34,6 +34,7 @@ pub enum CoreSymbol {
     Set,
     Error,
     Quote,
+    BeginProgram,
     GenUnspecified,
 }
 
@@ -51,6 +52,7 @@ impl CoreSymbol {
             CoreSymbol::Set => "set",
             CoreSymbol::Error => "error",
             CoreSymbol::Quote => "quote",
+            CoreSymbol::BeginProgram => "$begin-program",
             CoreSymbol::GenUnspecified => "$gen_unspecified",
         }
     }
