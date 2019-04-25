@@ -125,7 +125,7 @@ impl CompilerType {
             move |mut args: Vec<AstNode>, _function: &mut PartialFunction, state| match self {
                 CompilerType::RuntimeLocation(var_id) => {
                     if args.len() != 1 {
-                        return Err(CompilerError::SyntaxError);
+                        return Err(CompilerError::argc("set!", "1", args.len()));
                     }
                     let expr = args.pop().unwrap();
                     let mut ret = Vec::new();
@@ -154,7 +154,7 @@ impl CompilerType {
                 }
                 CompilerType::MaybeUndef { field, is_def } => {
                     if args.len() != 1 {
-                        return Err(CompilerError::SyntaxError);
+                        return Err(CompilerError::argc("set!", "1", args.len()));
                     }
 
                     let set_is_def = vec![

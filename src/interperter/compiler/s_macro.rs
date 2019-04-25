@@ -18,8 +18,8 @@
 */
 
 use super::{
-    compile_one, CompilerAction, CompilerError, CompilerState, CompilerType, LambdaBuilder, LetDef,
-    PartialFunction,
+    compile_one, error::AstCastErrorImpl, CompilerAction, CompilerError, CompilerState,
+    CompilerType, LambdaBuilder, LetDef, PartialFunction,
 };
 use crate::ast::{AstList, AstNode, AstSymbol, CoreSymbol};
 use crate::interperter::vm::{Statement, StatementType};
@@ -41,6 +41,25 @@ pub enum BuiltinMacro {
     BeginProgram,
 }
 
+fn assert_args(
+    what: &str,
+    args: &[AstNode],
+    argc: usize,
+    is_vargs: bool,
+) -> Result<(), CompilerError> {
+    if (is_vargs && args.len() < argc) || (!is_vargs && args.len() != argc) {
+        let or_more = if is_vargs { " or more" } else { "" };
+
+        Err(CompilerError::argc(
+            &format!("{}{}", argc, or_more),
+            what,
+            args.len(),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 impl BuiltinMacro {
     pub fn expand(
         &self,
@@ -50,9 +69,7 @@ impl BuiltinMacro {
     ) -> Result<Vec<CompilerAction>, CompilerError> {
         match self {
             BuiltinMacro::Lambda => {
-                if args.len() < 2 {
-                    return Err(CompilerError::SyntaxError);
-                }
+                assert_args("lambda", &args, 2, true)?;
 
                 let raw_formal_list = args.remove(0);
                 let mut lambda_builder = LambdaBuilder::from_body_exprs(args, state)?;
@@ -68,28 +85,21 @@ impl BuiltinMacro {
                                     .map(|list| (list.nodes, Some(list.terminator)))
                             });
 
-                        let (raw_formals, terminator) = if let Ok(t) = formals_terminator {
-                            t
-                        } else {
-                            return Err(CompilerError::SyntaxError);
+                        let (raw_formals, terminator) = match formals_terminator {
+                            Ok(t) => t,
+                            Err(_) => unreachable!(),
                         };
 
                         for raw_formal in raw_formals {
-                            let formal = if let Ok(symbol) = raw_formal.into_symbol() {
-                                symbol
-                            } else {
-                                return Err(CompilerError::SyntaxError);
-                            };
+                            let formal = raw_formal.into_symbol().into_compiler_result("lambda")?;
 
                             lambda_builder.add_args(Some(formal))
                         }
 
                         if let Some(rest) = terminator {
-                            if let Ok(name) = rest.into_symbol() {
-                                lambda_builder.add_vargs(name)
-                            } else {
-                                return Err(CompilerError::SyntaxError);
-                            }
+                            let name = rest.into_symbol().into_compiler_result("lambda")?;
+
+                            lambda_builder.add_vargs(name)
                         }
 
                         Ok(())
@@ -104,14 +114,16 @@ impl BuiltinMacro {
                 match parsed_res {
                     Ok(Ok(_)) => (),
                     Ok(Err(err)) => return Err(err),
-                    Err(_) => return Err(CompilerError::SyntaxError),
+                    Err(_) => return Err(CompilerError::syntax(
+                        "Lambda expects either a proper or improper list for the formals argument.",
+                    )),
                 }
 
                 Ok(vec![CompilerAction::Lambda(lambda_builder)])
             }
             BuiltinMacro::If => {
                 if args.len() != 2 && args.len() != 3 {
-                    return Err(CompilerError::SyntaxError);
+                    return Err(CompilerError::argc("if", "2 or 3", args.len()));
                 }
 
                 let false_expr = if args.len() == 3 {
@@ -136,22 +148,19 @@ impl BuiltinMacro {
                 ])
             }
             BuiltinMacro::Set => {
-                if args.is_empty() {
-                    return Err(CompilerError::SyntaxError);
-                }
+                assert_args("set!", &args, 1, true)?;
 
-                let var = if let Ok(x) = args.remove(0).into_symbol() {
-                    x
-                } else {
-                    return Err(CompilerError::SyntaxError);
-                };
+                let var = args.remove(0).into_symbol().into_compiler_result("set!")?;
 
                 let compiler_type = function.lookup(&var)?;
                 let expand_as_set_or_none = compiler_type.get_expand_as_set_fn();
                 if let Some(expand_as_set) = expand_as_set_or_none {
                     expand_as_set(args, function, state)
                 } else {
-                    Err(CompilerError::SyntaxError)
+                    Err(CompilerError::syntax(&format!(
+                        "Tried to set the macro {}.",
+                        var.get_name()
+                    )))
                 }
             }
             BuiltinMacro::Begin => {
@@ -161,9 +170,7 @@ impl BuiltinMacro {
                 compile_one(code.into(), state)
             }
             BuiltinMacro::Quote => {
-                if args.len() != 1 {
-                    return Err(CompilerError::SyntaxError);
-                }
+                assert_args("quote", &args, 1, false)?;
 
                 if let CompilerState::Body = state {
                     Ok(Vec::new())
@@ -183,9 +190,7 @@ impl BuiltinMacro {
                 }
             }
             BuiltinMacro::Let => {
-                if args.is_empty() {
-                    return Err(CompilerError::SyntaxError);
-                }
+                assert_args("let", &args, 2, true)?;
 
                 let (self_name, definitions) = match args.remove(0).into_proper_list() {
                     Ok(def) => (None, def),
@@ -193,13 +198,13 @@ impl BuiltinMacro {
                         let self_name = if let Ok(sym) = node.into_symbol() {
                             sym
                         } else {
-                            return Err(CompilerError::SyntaxError);
+                            return Err(CompilerError::syntax("let expects either a proper list or a symbol as the first argument"));
                         };
 
                         let defin = if let Ok(def) = args.remove(0).into_proper_list() {
                             def
                         } else {
-                            return Err(CompilerError::SyntaxError);
+                            return Err(CompilerError::syntax("let expects a symbol followed by a proper list for its named let form."));
                         };
 
                         (Some(self_name), defin)
@@ -236,17 +241,12 @@ impl BuiltinMacro {
                 }
             }
             BuiltinMacro::LetStar => {
-                if args.len() < 2 {
-                    return Err(CompilerError::SyntaxError);
-                }
+                assert_args("let*", &args, 2, true)?;
 
-                let definitons_or_err = args.remove(0).into_proper_list();
-
-                let mut definitions = if let Ok(def) = definitons_or_err {
-                    def
-                } else {
-                    return Err(CompilerError::SyntaxError);
-                };
+                let mut definitions = args
+                    .remove(0)
+                    .into_proper_list()
+                    .into_compiler_result("let*")?;
 
                 if definitions.len() < 2 {
                     let mut let_list = vec![CoreSymbol::Let.into(), definitions.into()];
@@ -267,17 +267,12 @@ impl BuiltinMacro {
                 compile_one(let_list.into(), state)
             }
             BuiltinMacro::LetRec => {
-                if args.is_empty() {
-                    return Err(CompilerError::SyntaxError);
-                }
+                assert_args("letrec", &args, 1, true)?;
 
-                let defs_or_err = args.remove(0).into_proper_list();
-
-                let raw_defs = if let Ok(def) = defs_or_err {
-                    def
-                } else {
-                    return Err(CompilerError::SyntaxError);
-                };
+                let raw_defs = args
+                    .remove(0)
+                    .into_proper_list()
+                    .into_compiler_result("letrec")?;
 
                 let in_defs = LetDef::from_raw_let(raw_defs)?;
                 let mut undef_macros = Vec::new();
@@ -383,62 +378,58 @@ impl BuiltinMacro {
                 compile_one(expr, state)
             }
             BuiltinMacro::Cond => {
-                if args.is_empty() {
-                    return Err(CompilerError::SyntaxError);
-                }
+                assert_args("cond", &args, 1, true)?;
 
                 let mut args_iter = args.into_iter().rev().peekable();
-                let mut else_clase = vec![CoreSymbol::GenUnspecified.into()];
+                let mut else_clause = vec![CoreSymbol::GenUnspecified.into()];
 
-                let raw_borrowed_else_clase = args_iter.peek().unwrap();
-                if let Some(clase) = raw_borrowed_else_clase.as_proper_list() {
+                let raw_borrowed_else_clause = args_iter.peek().unwrap();
+                if let Some(clause) = raw_borrowed_else_clause.as_proper_list() {
                     let else_symbol = AstSymbol::new("else");
-                    if !clase.is_empty()
-                        && clase[0] == else_symbol.clone().into()
+                    if !clause.is_empty()
+                        && clause[0] == else_symbol.clone().into()
                         && !function.is_bounded(&else_symbol)
                     {
-                        let mut raw_else_clase =
+                        let mut raw_else_clause =
                             args_iter.next().unwrap().into_proper_list().unwrap();
 
-                        raw_else_clase.remove(0);
-                        else_clase = vec![CoreSymbol::Begin.into()];
-                        else_clase.append(&mut raw_else_clase);
+                        raw_else_clause.remove(0);
+                        else_clause = vec![CoreSymbol::Begin.into()];
+                        else_clause.append(&mut raw_else_clause);
                     }
                 }
 
-                for raw_clase in args_iter {
-                    let mut clase = if let Ok(clas) = raw_clase.into_proper_list() {
-                        clas
-                    } else {
-                        return Err(CompilerError::SyntaxError);
-                    };
+                for raw_clause in args_iter {
+                    let mut clause = raw_clause.into_proper_list().into_compiler_result("cond")?;
 
-                    if clase.is_empty() {
-                        return Err(CompilerError::SyntaxError);
+                    if clause.is_empty() {
+                        return Err(CompilerError::syntax("Clause list cannot be empty."));
                     }
 
-                    let test = clase.remove(0);
+                    let test = clause.remove(0);
 
                     let mut begin = vec![CoreSymbol::Begin.into()];
-                    begin.append(&mut clase);
+                    begin.append(&mut clause);
 
-                    let new_else_clase =
-                        vec![CoreSymbol::If.into(), test, begin.into(), else_clase.into()];
-                    else_clase = new_else_clase;
+                    let new_else_clause = vec![
+                        CoreSymbol::If.into(),
+                        test,
+                        begin.into(),
+                        else_clause.into(),
+                    ];
+                    else_clause = new_else_clause;
                 }
 
-                compile_one(else_clase.into(), state)
+                compile_one(else_clause.into(), state)
             }
             BuiltinMacro::BeginProgram => {
-                if args.len() != 1 {
-                    return Err(CompilerError::SyntaxError);
-                }
+                assert_args("$begin-program", &args, 1, false)?;
 
-                let code = if let Ok(code) = args.pop().unwrap().into_proper_list() {
-                    code
-                } else {
-                    return Err(CompilerError::SyntaxError);
-                };
+                let code = args
+                    .pop()
+                    .unwrap()
+                    .into_proper_list()
+                    .into_compiler_result("$begin-program")?;
 
                 let lambda_builder = LambdaBuilder::from_body_exprs(code, state)?;
 

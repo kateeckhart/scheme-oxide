@@ -335,6 +335,22 @@ impl AstNode {
             false
         }
     }
+
+    pub fn get_name(&self) -> &'static str {
+        match &self.0 {
+            NonList(Number(_)) => "number",
+            NonList(Symbol(_)) => "symbol",
+            NonList(SchemeString(_)) => "string",
+            List(list) => {
+                if list.is_improper_list() {
+                    "improper list"
+                } else {
+                    "proper list"
+                }
+            }
+            NonList(Bool(_)) => "boolean",
+        }
+    }
 }
 
 impl From<CoreSymbol> for AstNode {

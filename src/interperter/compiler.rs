@@ -19,7 +19,6 @@
 
 use crate::ast::{AstNode, AstSymbol, CoreSymbol};
 use crate::interperter::vm::{SchemeFunction, Statement, StatementType};
-use crate::types::*;
 use std::collections::HashMap;
 use std::mem::replace;
 
@@ -28,6 +27,10 @@ use self::s_macro::BuiltinMacro;
 
 mod compiler_type;
 use self::compiler_type::CompilerType;
+
+mod error;
+use self::error::AstCastErrorImpl;
+pub use self::error::CompilerError;
 
 fn compile_one<T>(node: AstNode, state: CompilerState) -> Result<Vec<CompilerAction>, T> {
     Ok(vec![CompilerAction::Compile { expr: node, state }])
@@ -93,21 +96,11 @@ impl EnvironmentFrame {
     }
 }
 
-#[derive(Debug)]
-pub enum CompilerError {
-    IdentifierNotFound,
-    SyntaxError,
-}
-
-impl From<CastError> for CompilerError {
-    fn from(_: CastError) -> Self {
-        CompilerError::SyntaxError
-    }
-}
-
 fn gen_tail_body(mut code: Vec<AstNode>) -> Result<Vec<CompilerAction>, CompilerError> {
     if code.is_empty() {
-        return Err(CompilerError::SyntaxError);
+        return Err(CompilerError::syntax(
+            "Tried to compile an empty body expression.",
+        ));
     }
 
     let tail = code.pop().unwrap();
@@ -143,7 +136,7 @@ impl PartialFunction {
             }
         }
 
-        Err(CompilerError::IdentifierNotFound)
+        Err(CompilerError::identifier_not_found(&name.get_name()))
     }
 
     fn lookup(&mut self, name: &AstSymbol) -> Result<CompilerType, CompilerError> {
@@ -187,24 +180,24 @@ impl LetDef {
         let mut defs = Vec::new();
 
         for definition_or_err in raw_defs {
+            let bad_list_err = "Each let binding must be a proper list of 2.";
+
             let mut definition = if let Ok(def) = definition_or_err.into_proper_list() {
                 def
             } else {
-                return Err(CompilerError::SyntaxError);
+                return Err(CompilerError::syntax(bad_list_err));
             };
 
             if definition.len() != 2 {
-                return Err(CompilerError::SyntaxError);
+                return Err(CompilerError::syntax(bad_list_err));
             }
 
             let binding = definition.pop().unwrap();
-            let raw_formal = definition.pop().unwrap().into_symbol();
-
-            let formal = if let Ok(formal) = raw_formal {
-                formal
-            } else {
-                return Err(CompilerError::SyntaxError);
-            };
+            let formal = definition
+                .pop()
+                .unwrap()
+                .into_symbol()
+                .into_compiler_result("Let")?;
 
             defs.push(LetDef { formal, binding })
         }
@@ -368,8 +361,6 @@ pub enum CompilerAction {
 }
 
 fn add_call(argv: Vec<AstNode>, state: CompilerState) -> Vec<CompilerAction> {
-    let mut stack = Vec::new();
-
     let argc = argv.len() as u32;
 
     let s_type = if let CompilerState::Tail = state {
@@ -391,7 +382,7 @@ fn add_call(argv: Vec<AstNode>, state: CompilerState) -> Vec<CompilerAction> {
         })
     };
 
-    stack.push(CompilerAction::EmitAsm { statements });
+    let mut stack = vec![CompilerAction::EmitAsm { statements }];
 
     stack.extend(argv.into_iter().rev().map(|expr| CompilerAction::Compile {
         expr,
@@ -431,7 +422,7 @@ pub fn compile_function(
                         let function_object = if !argv.is_empty() {
                             argv.remove(0)
                         } else {
-                            return Err(CompilerError::SyntaxError);
+                            return Err(CompilerError::syntax("Tried to call the empty list."));
                         };
 
                         let calling_function;
@@ -469,13 +460,16 @@ pub fn compile_function(
                                 )?);
                                 Ok(())
                             } else {
-                                Err(CompilerError::SyntaxError)
+                                Err(CompilerError::syntax(&format!(
+                                    "Tried to get the value of the macro {}.",
+                                    ident_name.get_name()
+                                )))
                             }
                         })
                     })
                     .unwrap_or_else(|expr| {
                         if expr.is_improper_list() {
-                            Err(CompilerError::SyntaxError)
+                            Err(CompilerError::syntax("Tried to call an improper list."))
                         } else {
                             if let CompilerState::Body = state {
                             } else {
