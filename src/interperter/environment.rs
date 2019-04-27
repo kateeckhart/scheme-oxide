@@ -120,8 +120,14 @@ fn gen_scheme_environment() -> BaseEnvironment {
         AstSymbol::new("$object-type-id-get"),
         BuiltinFunction::GetTypeId,
     );
-    ret.push_builtin_function(AstSymbol::new("$object-field-get"), BuiltinFunction::GetField);
-    ret.push_builtin_function(AstSymbol::new("$object-field-set!"), BuiltinFunction::SetField);
+    ret.push_builtin_function(
+        AstSymbol::new("$object-field-get"),
+        BuiltinFunction::GetField,
+    );
+    ret.push_builtin_function(
+        AstSymbol::new("$object-field-set!"),
+        BuiltinFunction::SetField,
+    );
 
     ret.push_builtin_function(AstSymbol::new("eqv?"), BuiltinFunction::Eqv);
     ret.push_builtin_function(AstSymbol::new("quotient"), BuiltinFunction::Quotient);
@@ -319,6 +325,22 @@ fn gen_scheme_environment() -> BaseEnvironment {
         (lambda (x)
             (let display ((x x))
                 (cond
+                    ((char? x) (write-char x))
+                    ((null? x) (display "()"))
+                    ((pair? x)
+                        (display "(")
+                        (display (car x))
+                        (let display-contents ((list (cdr x)))
+                            (cond
+                                ((null? list) (if #f #f))
+                                ((pair? list)
+                                    (display " ")
+                                    (display (car list))
+                                    (display-contents (cdr list)))
+                                (else
+                                    (display " . ")
+                                    (display list))))
+                        (display ")"))
                     ((string? x)
                         (let print-str ((index 0))
                             (if (= (string-length x) index)
