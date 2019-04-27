@@ -33,3 +33,7 @@
 (newline)
 (display #f)
 (newline)
+(display '''Test)
+(newline)
+(display (eqv? 'test 'test))
+(newline)

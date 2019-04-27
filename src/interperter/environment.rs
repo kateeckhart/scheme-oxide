@@ -74,6 +74,10 @@ fn gen_scheme_environment() -> BaseEnvironment {
         AstSymbol::new("$mutable-pair-type-id"),
         get_mutable_pair_type_id().into(),
     );
+    ret.push_object(
+        AstSymbol::new("$symbol-type-id"),
+        get_symbol_type_id().into(),
+    );
 
     ret.push_builtin_function(AstSymbol::new("+"), BuiltinFunction::Add);
     ret.push_builtin_function(AstSymbol::new("*"), BuiltinFunction::Mul);
@@ -139,10 +143,6 @@ fn gen_scheme_environment() -> BaseEnvironment {
         CoreSymbol::GenUnspecified.into(),
         BuiltinFunction::GenUnspecified,
     );
-    ret.push_builtin_function(
-        AstSymbol::new("$gen-unspecified"),
-        BuiltinFunction::GenUnspecified,
-    );
 
     ret.push_builtin_function(AstSymbol::new("make-string"), BuiltinFunction::NewString);
     ret.push_builtin_function(AstSymbol::new("string-length"), BuiltinFunction::StringLen);
@@ -177,6 +177,21 @@ fn gen_scheme_environment() -> BaseEnvironment {
         "(lambda (x) (if (negative? x) (- x) x))",
     )
     .unwrap();
+
+    ret.push_eval(
+        AstSymbol::new("symbol?"),
+        "(lambda (x) (and ($object? x) (eqv? ($object-type-id-get x) $symbol-type-id)))",
+    )
+    .unwrap();
+    ret.push_eval(
+        AstSymbol::new("symbol->string"),
+        r#"(lambda (x)
+                (if (symbol? x)
+                    ($object-field-get x 0)
+                    (error 'symbol->string "Not a symbol.")))"#,
+    )
+    .unwrap();
+
     ret.push_eval(AstSymbol::new("list"), "(lambda list list)")
         .unwrap();
 
@@ -350,6 +365,7 @@ fn gen_scheme_environment() -> BaseEnvironment {
                                     (print-str (+ 1 index))))))
                     ((number? x) (display (number->string x)))
                     ((boolean? x) (if x (display "#t") (display "#f")))
+                    ((symbol? x) (display (symbol->string x)))
                     (else (display "#Unwriteable_object")))))"##,
     )
     .unwrap();
