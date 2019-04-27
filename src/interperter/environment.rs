@@ -238,8 +238,8 @@ fn gen_scheme_environment() -> BaseEnvironment {
                     x
                     (let ((y (car rest)) (new-rest (cdr rest)))
                         (if (< x y)
-                        (max y new-rest)
-                        (max x new-rest))))))",
+                            (max y new-rest)
+                            (max x new-rest))))))",
     )
     .unwrap();
     ret.push_eval(
@@ -311,7 +311,8 @@ fn gen_scheme_environment() -> BaseEnvironment {
                     (if (zero? x)
                         (list->string chars)
                         (let* ((digits "0123456789") (digit (string-ref digits (remainder x 10))) (rest (quotient x 10)))
-                            (to-string rest (cons digit chars)))))))"#).unwrap();
+                            (to-string rest (cons digit chars)))))))"#
+    ).unwrap();
     ret.push_eval(
         AstSymbol::new("display"),
         r##"
