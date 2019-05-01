@@ -347,7 +347,7 @@ fn gen_scheme_environment() -> BaseEnvironment {
                         (display (car x))
                         (let display-contents ((list (cdr x)))
                             (cond
-                                ((null? list) (if #f #f))
+                                ((null? list))
                                 ((pair? list)
                                     (display " ")
                                     (display (car list))
