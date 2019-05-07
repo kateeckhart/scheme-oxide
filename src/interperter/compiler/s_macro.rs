@@ -411,7 +411,12 @@ impl BuiltinMacro {
                     let new_else_clause = if clause.is_empty() {
                         let test_res = AstSymbol::gen_temp();
                         let bindings = vec![vec![test_res.clone().into(), test].into()];
-                        let if_list = vec![CoreSymbol::If.into(), test_res.clone().into(), test_res.into(), else_clause.into()];
+                        let if_list = vec![
+                            CoreSymbol::If.into(),
+                            test_res.clone().into(),
+                            test_res.into(),
+                            else_clause.into(),
+                        ];
                         vec![CoreSymbol::Let.into(), bindings.into(), if_list.into()]
                     } else {
                         let mut begin = vec![CoreSymbol::Begin.into()];
