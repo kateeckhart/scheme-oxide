@@ -17,18 +17,18 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::cell::RefCell;
+use std::cell::Cell;
 use std::convert::Infallible;
 use std::rc::Rc;
 use std::str;
 
 #[derive(Clone, Debug)]
-pub struct SchemeString(Rc<RefCell<SchemeStringInner>>);
+pub struct SchemeString(Rc<SchemeStringInner>);
 
 #[derive(Debug)]
 struct SchemeStringInner {
     mutable: bool,
-    chars: Box<[char]>,
+    chars: Box<[Cell<char>]>,
 }
 
 #[derive(Debug)]
@@ -46,33 +46,32 @@ impl SchemeString {
         let mut chars = Vec::with_capacity(size);
 
         for _ in 0..size {
-            chars.push(fill)
+            chars.push(Cell::new(fill))
         }
 
-        SchemeString(Rc::new(RefCell::new(SchemeStringInner {
+        SchemeString(Rc::new(SchemeStringInner {
             mutable: true,
             chars: chars.into_boxed_slice(),
-        })))
+        }))
     }
 
     pub fn len(&self) -> usize {
-        self.0.borrow().chars.len()
+        self.0.chars.len()
     }
 
     pub fn get(&self, index: usize) -> Option<char> {
-        self.0.borrow().chars.get(index).cloned()
+        self.0.chars.get(index).map(Cell::get)
     }
 
     pub fn set(&self, index: usize, c: char) -> Result<(), StringSetError> {
-        let mut self_ref = self.0.borrow_mut();
-        if !self_ref.mutable {
+        if !self.0.mutable {
             return Err(StringSetError::Immutable);
         }
 
-        self_ref
+        self.0
             .chars
-            .get_mut(index)
-            .map(|char_ptr| *char_ptr = c)
+            .get(index)
+            .map(|char_ptr| char_ptr.set(c))
             .ok_or(StringSetError::IndexOutOfBounds)
     }
 }
@@ -89,10 +88,10 @@ impl str::FromStr for SchemeString {
 
     fn from_str(s: &str) -> Result<Self, Infallible> {
         thread_local! {
-            static EMPTY_STRING: SchemeString = SchemeString(Rc::new(RefCell::new(SchemeStringInner {
+            static EMPTY_STRING: SchemeString = SchemeString(Rc::new(SchemeStringInner {
                 mutable: false,
                 chars: Vec::new().into_boxed_slice(),
-            })))
+            }))
         }
 
         if s == "" {
@@ -102,11 +101,11 @@ impl str::FromStr for SchemeString {
         let mut chars = Vec::new();
 
         for c in s.chars() {
-            chars.push(c)
+            chars.push(Cell::new(c))
         }
-        Ok(SchemeString(Rc::new(RefCell::new(SchemeStringInner {
+        Ok(SchemeString(Rc::new(SchemeStringInner {
             mutable: false,
             chars: chars.into_boxed_slice(),
-        }))))
+        })))
     }
 }
