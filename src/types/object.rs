@@ -22,20 +22,20 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 #[derive(Clone, Debug)]
-pub struct SchemeObject(Rc<RefCell<SchemeObjectInner>>);
+pub struct SchemeObject(Rc<SchemeObjectInner>);
 
 #[derive(Debug)]
 struct SchemeObjectInner {
     type_id: SchemeType,
-    fields: Box<[SchemeType]>,
+    fields: RefCell<Box<[SchemeType]>>,
 }
 
 impl SchemeObject {
     pub fn new(type_id: SchemeType, fields: Vec<SchemeType>) -> SchemeObject {
-        SchemeObject(Rc::new(RefCell::new(SchemeObjectInner {
+        SchemeObject(Rc::new(SchemeObjectInner {
             type_id,
-            fields: fields.into_boxed_slice(),
-        })))
+            fields: RefCell::new(fields.into_boxed_slice()),
+        }))
     }
 
     //Create an object with a unique address in memory.
@@ -45,18 +45,18 @@ impl SchemeObject {
     }
 
     pub fn get_type_id(&self) -> SchemeType {
-        self.0.borrow().type_id.clone()
+        self.0.type_id.clone()
     }
 
     pub fn get_field(&self, index: usize) -> Option<SchemeType> {
-        self.0.borrow().fields.get(index).cloned()
+        self.0.fields.borrow().get(index).cloned()
     }
 
     //Error if index is out of bounds.
     pub fn set_field(&self, index: usize, object: SchemeType) -> Result<(), ()> {
         self.0
-            .borrow_mut()
             .fields
+            .borrow_mut()
             .get_mut(index)
             .map(|old_object| *old_object = object)
             .ok_or(())
