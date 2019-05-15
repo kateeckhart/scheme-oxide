@@ -18,10 +18,10 @@
 */
 
 use super::{
-    compiler::EnvironmentFrame, eval_with_environment, BuiltinFunction, FunctionRef,
-    FunctionRefInner, RuntimeError,
+    compiler::parse_define, compiler::EnvironmentFrame, eval_with_environment, BuiltinFunction,
+    FunctionRef, FunctionRefInner, RuntimeError,
 };
-use crate::ast::{AstSymbol, CoreSymbol};
+use crate::ast::{AstNode, AstSymbol, CoreSymbol};
 use crate::parser::Parser;
 use crate::types::*;
 use std::cell::RefCell;
@@ -53,8 +53,8 @@ impl BaseEnvironment {
         )
     }
 
-    fn push_eval(&mut self, name: AstSymbol, expressions: &str) -> Result<(), RuntimeError> {
-        let object = eval_with_environment(Parser::new(expressions).next().unwrap()?, self)?;
+    fn push_eval(&mut self, name: AstSymbol, expression: AstNode) -> Result<(), RuntimeError> {
+        let object = eval_with_environment(expression, self)?;
 
         self.push_object(name, object);
         Ok(())
@@ -78,6 +78,9 @@ fn gen_scheme_environment() -> BaseEnvironment {
         AstSymbol::new("$symbol-type-id"),
         get_symbol_type_id().into(),
     );
+
+    let newline_str: SchemeString = "\n".parse().unwrap();
+    ret.push_object(AstSymbol::new("$newline-str"), newline_str.into());
 
     ret.push_builtin_function(AstSymbol::new("+"), BuiltinFunction::Add);
     ret.push_builtin_function(AstSymbol::new("*"), BuiltinFunction::Mul);
@@ -153,229 +156,19 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_builtin_function(AstSymbol::new("string?"), BuiltinFunction::IsString);
     ret.push_builtin_function(AstSymbol::new("write-char"), BuiltinFunction::WriteChar);
 
-    ret.push_eval(AstSymbol::new("eq?"), "(lambda (x y) (eqv? x y))")
-        .unwrap();
-    ret.push_eval(AstSymbol::new("null?"), "(lambda (x) (eqv? x '()))")
-        .unwrap();
-    ret.push_eval(AstSymbol::new("not"), "(lambda (x) (if x #f #t))")
-        .unwrap();
-    ret.push_eval(
-        AstSymbol::new("boolean?"),
-        "(lambda (x) (or (eqv? x #t) (eqv? x #f)))",
-    )
-    .unwrap();
+    let raw_std_lib = include_str!("../../scheme-src/std-lib.scm");
+    let define_symbol = AstSymbol::new("define");
+    for raw_statement in Parser::new(raw_std_lib) {
+        let mut statement = raw_statement.unwrap().into_proper_list().unwrap();
 
-    ret.push_eval(AstSymbol::new("zero?"), "(lambda (x) (= x 0))")
-        .unwrap();
-    ret.push_eval(AstSymbol::new("positive?"), "(lambda (x) (> x 0))")
-        .unwrap();
-    ret.push_eval(AstSymbol::new("negative?"), "(lambda (x) (< x 0))")
-        .unwrap();
-
-    ret.push_eval(
-        AstSymbol::new("abs"),
-        "(lambda (x) (if (negative? x) (- x) x))",
-    )
-    .unwrap();
-
-    ret.push_eval(
-        AstSymbol::new("symbol?"),
-        "(lambda (x) (and ($object? x) (eqv? ($object-type-id-get x) $symbol-type-id)))",
-    )
-    .unwrap();
-    ret.push_eval(
-        AstSymbol::new("symbol->string"),
-        r#"(lambda (x)
-                (if (symbol? x)
-                    ($object-field-get x 0)
-                    (error 'symbol->string "Not a symbol.")))"#,
-    )
-    .unwrap();
-
-    ret.push_eval(AstSymbol::new("list"), "(lambda list list)")
-        .unwrap();
-
-    ret.push_eval(
-        AstSymbol::new("$mutable-pair?"),
-        "(lambda (x) (and ($object? x) (eqv? ($object-type-id-get x) $mutable-pair-type-id)))",
-    )
-    .unwrap();
-    ret.push_eval(
-        AstSymbol::new("pair?"),
-        "(lambda (x) (or ($mutable-pair? x) (and ($object? x) (eqv? ($object-type-id-get x) $immutable-pair-type-id))))",
-    )
-    .unwrap();
-    ret.push_eval(
-        AstSymbol::new("$assert-pair"),
-        r#"(lambda (name x) (if (not (pair? x)) (error name "Not a pair." x)))"#,
-    )
-    .unwrap();
-    ret.push_eval(
-        AstSymbol::new("$assert-mutable-pair"),
-        r#"(lambda (name x) (if (not ($mutable-pair? x)) (error name "Not a mutable pair." x)))"#,
-    )
-    .unwrap();
-    ret.push_eval(
-        AstSymbol::new("car"),
-        "(lambda (x) ($assert-pair 'car x) ($object-field-get x 0))",
-    )
-    .unwrap();
-    ret.push_eval(
-        AstSymbol::new("cdr"),
-        "(lambda (x) ($assert-pair 'cdr x) ($object-field-get x 1))",
-    )
-    .unwrap();
-    ret.push_eval(
-        AstSymbol::new("set-car!"),
-        "(lambda (x y) ($assert-mutable-pair 'set-car! x) ($object-field-set! x 0 y))",
-    )
-    .unwrap();
-    ret.push_eval(
-        AstSymbol::new("set-cdr!"),
-        "(lambda (x y) ($assert-mutable-pair 'set-cdr! x) ($object-field-set! x 1 y))",
-    )
-    .unwrap();
-    ret.push_eval(
-        AstSymbol::new("cons"),
-        "(lambda (x y) ($make-object $mutable-pair-type-id x y))",
-    )
-    .unwrap();
-
-    ret.push_eval(AstSymbol::new("equal?"), "
-        (lambda (x y)
-            (let equal? ((x x) (y y))
-                (if (eqv? x y)
-                    #t
-                    (cond
-                        ((and (pair? x) (pair? y)) (and (equal? (car x) (car y)) (equal? (cdr x) (cdr y))))
-                        (else #f)))))").unwrap();
-
-    ret.push_eval(
-        AstSymbol::new("max"),
-        "
-        (lambda (x . in-rest)
-            (let max ((x x) (rest in-rest))
-                (if (null? rest)
-                    x
-                    (let ((y (car rest)) (new-rest (cdr rest)))
-                        (if (< x y)
-                            (max y new-rest)
-                            (max x new-rest))))))",
-    )
-    .unwrap();
-    ret.push_eval(
-        AstSymbol::new("min"),
-        "
-        (lambda (x . in-rest)
-            (let min ((x x) (rest in-rest))
-                (if (null? rest)
-                    x
-                    (let ((y (car rest)) (new-rest (cdr rest)))
-                        (if (< x y)
-                            (min x new-rest)
-                            (min y new-rest))))))",
-    )
-    .unwrap();
-
-    ret.push_eval(
-        AstSymbol::new("$string-copy-onto!"),
-        r#"
-        (lambda (src dest size)
-            (if (or (> size (string-length src)) (> size (string-length dest)))
-                (error '$string-copy-onto "Size is greater than length.")
-                (let copy-onto ((index 0))
-                    (if (= index size)
-                        (if #f #f)
-                        (let ((char (string-ref src index)))
-                            (string-set! dest index char)
-                            (copy-onto (+ index 1)))))))"#,
-    )
-    .unwrap();
-    ret.push_eval(
-        AstSymbol::new("$string-truncating-copy"),
-        r#"
-        (lambda (str size)
-            (if (zero? size)
-                ""
-                (let ((new_str (make-string size)) (chars-to-copy (min size (string-length str))))
-                    ($string-copy-onto! str new_str chars-to-copy)
-                    new_str)))"#,
-    )
-    .unwrap();
-    ret.push_eval(
-        AstSymbol::new("string-copy"),
-        "
-        (lambda (str)
-            ($string-truncating-copy str (string-length str)))",
-    )
-    .unwrap();
-    ret.push_eval(AstSymbol::new("list->string"), r#"
-        (lambda (lst)
-            (if (null? lst)
-                ""
-                (let conv-list ((built-string (make-string 1)) (index 0) (lst-head lst))
-                    (cond
-                        ((null? lst-head)
-                            (if (= (string-length built-string) index)
-                                built-string
-                                ($string-truncating-copy built-string index)))
-                        ((= index (string-length built-string))
-                            (conv-list ($string-truncating-copy built-string (* 2 index)) index lst-head))
-                        (else
-                            (string-set! built-string index (car lst-head))
-                            (conv-list built-string (+ 1 index) (cdr lst-head)))))))"#).unwrap();
-    ret.push_eval(AstSymbol::new("number->string"), r#"
-        (lambda (x)
-            (if (zero? x)
-                (string-copy "0")
-                (let to-string ((x x) (chars '()))
-                    (if (zero? x)
-                        (list->string chars)
-                        (let* ((digits "0123456789") (digit (string-ref digits (remainder x 10))) (rest (quotient x 10)))
-                            (to-string rest (cons digit chars)))))))"#
-    ).unwrap();
-    ret.push_eval(
-        AstSymbol::new("display"),
-        r##"
-        (lambda (x)
-            (let display ((x x))
-                (cond
-                    ((char? x) (write-char x))
-                    ((null? x) (display "()"))
-                    ((pair? x)
-                        (display "(")
-                        (display (car x))
-                        (let display-contents ((list (cdr x)))
-                            (cond
-                                ((null? list))
-                                ((pair? list)
-                                    (display " ")
-                                    (display (car list))
-                                    (display-contents (cdr list)))
-                                (else
-                                    (display " . ")
-                                    (display list))))
-                        (display ")"))
-                    ((string? x)
-                        (let print-str ((index 0))
-                            (if (= (string-length x) index)
-                                (if #f #f)
-                                (begin
-                                    (write-char (string-ref x index))
-                                    (print-str (+ 1 index))))))
-                    ((number? x) (display (number->string x)))
-                    ((boolean? x) (if x (display "#t") (display "#f")))
-                    ((symbol? x) (display (symbol->string x)))
-                    (else (display "#Unwriteable_object")))))"##,
-    )
-    .unwrap();
-    let newline_str: SchemeString = "\n".parse().unwrap();
-    ret.push_object(AstSymbol::new("$newline-str"), newline_str.into());
-    ret.push_eval(
-        AstSymbol::new("newline"),
-        "(lambda () (display $newline-str))",
-    )
-    .unwrap();
+        if let Some(true) = statement[0].as_symbol().map(|x| *x == define_symbol) {
+            statement.remove(0);
+            let (symbol, expr) = parse_define(statement).unwrap();
+            ret.push_eval(symbol, expr).unwrap()
+        } else {
+            eval_with_environment(statement.into(), &ret).unwrap();
+        }
+    }
 
     ret
 }

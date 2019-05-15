@@ -17,7 +17,7 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use crate::ast::{AstNode, AstSymbol, CoreSymbol};
+use crate::ast::{AstListBuilder, AstNode, AstSymbol, CoreSymbol};
 use crate::interperter::vm::{SchemeFunction, Statement, StatementType};
 use std::collections::HashMap;
 use std::mem::replace;
@@ -34,6 +34,47 @@ pub use self::error::CompilerError;
 
 fn compile_one<T>(node: AstNode, state: CompilerState) -> Result<Vec<CompilerAction>, T> {
     Ok(vec![CompilerAction::Compile { expr: node, state }])
+}
+
+pub fn parse_define(mut define: Vec<AstNode>) -> Result<(AstSymbol, AstNode), CompilerError> {
+    if define.len() < 2 {
+        return Err(CompilerError::argc("define", "2 or more", define.len()));
+    }
+
+    let define_name = define.remove(0);
+
+    if define_name.as_symbol().is_some() && define.len() == 1 {
+        let expr = define.pop().unwrap();
+        Ok((define_name.into_symbol().unwrap(), expr))
+    } else if define_name.as_list().is_some() {
+        let (mut raw_formal_list, end) = define_name.into_list().unwrap().into_inner();
+        if raw_formal_list.is_empty() {
+            return Err(CompilerError::argc("define", "1 or more", define.len()));
+        }
+
+        let name = raw_formal_list
+            .remove(0)
+            .into_symbol()
+            .into_compiler_result("define")?;
+
+        let formals = if raw_formal_list.is_empty() {
+            end
+        } else {
+            let mut formal_list = AstListBuilder::new();
+            for formal in raw_formal_list {
+                formal_list.push(formal)
+            }
+
+            formal_list.build_with_tail(end).unwrap().into()
+        };
+
+        let mut lambda_list = vec![CoreSymbol::Lambda.into(), formals];
+        lambda_list.append(&mut define);
+
+        Ok((name, lambda_list.into()))
+    } else {
+        Err(CompilerError::syntax("Invalid define form."))
+    }
 }
 
 #[derive(Clone)]
@@ -483,10 +524,7 @@ pub fn compile_function(
                         }
                     });
 
-                match parsed_expr {
-                    Ok(()) => (),
-                    Err(err) => return Err(err),
-                }
+                parsed_expr?
             }
             CompilerAction::PrependAsm { mut statements } => {
                 statements.append(&mut current_code_block);
