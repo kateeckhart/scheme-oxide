@@ -103,11 +103,22 @@ enum ListType {
 }
 
 impl ListType {
+    fn is_proper_list(&self) -> bool {
+        !self.is_improper_list()
+    }
+
     fn is_improper_list(&self) -> bool {
         if let ListType::Improper(_) = self {
             true
         } else {
             false
+        }
+    }
+
+    fn into_node(self) -> AstNode {
+        match self {
+            ListType::Proper => AstNode(AstNodeInner::List(AstList::none())),
+            ListType::Improper(x) => AstNode(AstNodeInner::NonList(x)),
         }
     }
 
@@ -140,35 +151,24 @@ impl AstList {
         }
     }
 
+    pub fn is_proper_list(&self) -> bool {
+        self.list_type.is_proper_list()
+    }
+
+    pub fn is_empty_list(&self) -> bool {
+        self.is_proper_list() && self.nodes.is_empty()
+    }
+
     pub fn is_improper_list(&self) -> bool {
         self.list_type.is_improper_list()
     }
 
-    pub fn as_proper_list(&self) -> Option<&[AstNode]> {
-        if let ListType::Proper = self.list_type {
-            Some(&self.nodes)
-        } else {
-            None
-        }
+    pub fn as_nodes(&self) -> &[AstNode] {
+        &self.nodes
     }
 
-    pub fn into_proper_list(self) -> Result<Vec<AstNode>, AstList> {
-        if let ListType::Proper = self.list_type {
-            Ok(self.nodes)
-        } else {
-            Err(self)
-        }
-    }
-
-    pub fn into_improper_list(self) -> Result<ImproperList, AstList> {
-        if let ListType::Improper(terminator) = self.list_type {
-            Ok(ImproperList {
-                nodes: self.nodes,
-                terminator: AstNode::from_non_list(terminator),
-            })
-        } else {
-            Err(self)
-        }
+    pub fn into_inner(self) -> (Vec<AstNode>, AstNode) {
+        (self.nodes, self.list_type.into_node())
     }
 }
 
@@ -179,11 +179,6 @@ impl From<Vec<AstNode>> for AstList {
             list_type: ListType::Proper,
         }
     }
-}
-
-pub struct ImproperList {
-    pub nodes: Vec<AstNode>,
-    pub terminator: AstNode,
 }
 
 pub struct AstListBuilder {
@@ -291,11 +286,9 @@ impl AstNode {
     }
 
     pub fn as_proper_list(&self) -> Option<&[AstNode]> {
-        if let List(list) = &self.0 {
-            list.as_proper_list()
-        } else {
-            None
-        }
+        self.as_list()
+            .filter(|x| x.is_proper_list())
+            .map(AstList::as_nodes)
     }
 
     pub fn as_symbol(&self) -> Option<&AstSymbol> {
@@ -325,7 +318,11 @@ impl AstNode {
     pub fn into_proper_list(self) -> Result<Vec<AstNode>, AstNode> {
         let list = self.into_list()?;
 
-        list.into_proper_list().map_err(|list| AstNode(List(list)))
+        if !list.is_proper_list() {
+            return Err(AstNode(List(list)));
+        }
+
+        Ok(list.into_inner().0)
     }
 
     pub fn is_improper_list(&self) -> bool {

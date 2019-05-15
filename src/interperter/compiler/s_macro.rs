@@ -77,18 +77,7 @@ impl BuiltinMacro {
                 let parsed_res = raw_formal_list
                     .into_list()
                     .map(|formal_list| {
-                        let formals_terminator = formal_list
-                            .into_proper_list()
-                            .map(|list| (list, None))
-                            .or_else(|list| {
-                                list.into_improper_list()
-                                    .map(|list| (list.nodes, Some(list.terminator)))
-                            });
-
-                        let (raw_formals, terminator) = match formals_terminator {
-                            Ok(t) => t,
-                            Err(_) => unreachable!(),
-                        };
+                        let (raw_formals, terminator) = formal_list.into_inner();
 
                         for raw_formal in raw_formals {
                             let formal = raw_formal.into_symbol().into_compiler_result("lambda")?;
@@ -96,8 +85,12 @@ impl BuiltinMacro {
                             lambda_builder.add_args(Some(formal))
                         }
 
-                        if let Some(rest) = terminator {
-                            let name = rest.into_symbol().into_compiler_result("lambda")?;
+                        if !terminator
+                            .as_list()
+                            .map(AstList::is_empty_list)
+                            .unwrap_or(false)
+                        {
+                            let name = terminator.into_symbol().into_compiler_result("lambda")?;
 
                             lambda_builder.add_vargs(name)
                         }

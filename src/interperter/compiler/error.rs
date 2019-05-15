@@ -37,7 +37,7 @@ impl CompilerError {
     pub fn argc(what: &str, expected: &str, actual: usize) -> Self {
         Self {
             e_type: CompilerErrorType::ArgError,
-            message: format!("{} {} arguments expected got {}.", what, expected, actual),
+            message: format!("{} expected {} arguments got {}.", what, expected, actual),
         }
     }
 
