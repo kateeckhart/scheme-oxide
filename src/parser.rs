@@ -35,11 +35,11 @@ impl ParserToken {
             Token::Block(Block::Start) => ParserToken::PartialList(AstListBuilder::new()),
             Token::Block(Block::End) => ParserToken::ListEnd,
             Token::TString(string) => {
-                ParserToken::Datum(AstNode::from_string(unescape_string(&string)?))
+                ParserToken::Datum(AstNode::from_string(unescape_string(string)?))
             }
-            Token::Symbol(symbol) => ParserToken::Datum(AstSymbol::new(&symbol).into()),
+            Token::Symbol(symbol) => ParserToken::Datum(AstSymbol::new(symbol).into()),
             Token::Number(num) => {
-                ParserToken::Datum(AstNode::from_number(i64::from_str_radix(&num, 10)?))
+                ParserToken::Datum(AstNode::from_number(i64::from_str_radix(num, 10)?))
             }
             Token::Bool(boolean) => ParserToken::Datum(AstNode::from_bool(boolean)),
             Token::Dot => ParserToken::Dot,
@@ -192,8 +192,8 @@ impl<'a> Parser<'a> {
                         ));
                     }
                 }
-                _ => {
-                    self.stack.push(stack_top.unwrap());
+                Some(top) => {
+                    self.stack.push(top);
                     if self.push_input()? {
                         return Err(ParserError::TokenizerError(
                             TokenizerError::UnexpectedEndOfFile,

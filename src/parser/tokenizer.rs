@@ -32,11 +32,11 @@ pub enum Mark {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub enum Token {
+pub enum Token<'a> {
     Block(Block),
-    TString(String),
-    Symbol(String),
-    Number(String),
+    TString(&'a str),
+    Symbol(&'a str),
+    Number(&'a str),
     Bool(bool),
     Dot,
     Mark(Mark),
@@ -89,14 +89,14 @@ lazy_static! {
     static ref REGEX: Regex = gen_regex();
 }
 
-//Type used to store more information about each token then is exposed
-enum InternalToken {
-    PublicToken(Token),
+//Type used to store more information about each token than is exposed to parser
+enum InternalToken<'a> {
+    PublicToken(Token<'a>),
     EndOfFile,
     Whitespace,
 }
 
-impl InternalToken {
+impl<'a> InternalToken<'a> {
     fn can_ignore(&self) -> bool {
         match self {
             InternalToken::PublicToken(_) => false,
@@ -105,14 +105,14 @@ impl InternalToken {
         }
     }
 
-    fn into_option(self) -> Option<Token> {
+    fn into_option(self) -> Option<Token<'a>> {
         match self {
             InternalToken::PublicToken(token) => Some(token),
             _ => None,
         }
     }
 
-    fn into_public(self) -> Token {
+    fn into_public(self) -> Token<'a> {
         self.into_option().unwrap()
     }
 }
@@ -124,23 +124,20 @@ pub enum TokenizerError {
 }
 
 pub struct Tokenizer<'a> {
-    start: usize, //Byte offset that a new token starts
     input: &'a str,
 }
 
 impl<'a> Tokenizer<'a> {
     pub fn new(input: &'a str) -> Self {
-        Tokenizer { start: 0, input }
+        Tokenizer { input }
     }
 
-    fn gen_token(&mut self) -> Result<InternalToken, TokenizerError> {
-        if self.start == self.input.len() {
+    fn gen_token(&mut self) -> Result<InternalToken<'a>, TokenizerError> {
+        if self.input.is_empty() {
             return Ok(InternalToken::EndOfFile);
         }
 
-        let current_possition = &self.input[self.start..];
-
-        let unchecked_captures = REGEX.captures(current_possition);
+        let unchecked_captures = REGEX.captures(&self.input);
         let captures = if let Some(cap) = unchecked_captures {
             cap
         } else {
@@ -156,7 +153,7 @@ impl<'a> Tokenizer<'a> {
             return Err(TokenizerError::UnexpectedEndOfFile);
         } else {
             InternalToken::PublicToken(if let Some(string) = captures.name("goodStringBody") {
-                Token::TString(string.as_str().to_string())
+                Token::TString(string.as_str())
             } else if let Some(block) = captures.name("block") {
                 let block_char = block.as_str();
                 if block_char == "(" {
@@ -178,10 +175,10 @@ impl<'a> Tokenizer<'a> {
                 }
             } else if let Some(symbol) = captures.name("symbol") {
                 end_of_token = symbol.end();
-                Token::Symbol(symbol.as_str().to_string())
+                Token::Symbol(symbol.as_str())
             } else if let Some(number) = captures.name("number") {
                 end_of_token = number.end();
-                Token::Number(number.as_str().to_string())
+                Token::Number(number.as_str())
             } else if let Some(dot) = captures.name("dot") {
                 end_of_token = dot.end();
                 Token::Dot
@@ -196,14 +193,14 @@ impl<'a> Tokenizer<'a> {
             })
         };
 
-        self.start += end_of_token;
+        self.input = &self.input[end_of_token..];
 
         Ok(ret)
     }
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
-    type Item = Result<Token, TokenizerError>;
+    type Item = Result<Token<'a>, TokenizerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut unchecked_token;
