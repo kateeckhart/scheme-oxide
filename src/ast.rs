@@ -18,7 +18,6 @@
 */
 
 use crate::environment;
-use crate::types::pair::ListFactory;
 use crate::types::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 

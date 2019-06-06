@@ -19,11 +19,9 @@
 
 use crate::environment;
 
+use crate::interperter::FunctionRef;
 use std::cell::RefCell;
 use std::collections::HashMap;
-pub mod pair;
-pub use self::pair::SchemePair;
-use crate::interperter::FunctionRef;
 mod object;
 pub use self::object::SchemeObject;
 mod string;
@@ -48,6 +46,40 @@ pub fn new_symbol(name: String) -> SchemeObject {
             })
             .clone()
     })
+}
+
+#[derive(Clone, Debug)]
+pub struct ListFactory {
+    push_fn: FunctionRef,
+    res_fn: FunctionRef,
+}
+
+impl ListFactory {
+    pub fn new(mutable: bool) -> Self {
+        let list_factory = environment::make_list_factory(mutable.into()).unwrap();
+        let push_fn = environment::car(list_factory.clone())
+            .unwrap()
+            .to_function()
+            .unwrap();
+        let res_fn = environment::cdr(list_factory)
+            .unwrap()
+            .to_function()
+            .unwrap();
+
+        Self { push_fn, res_fn }
+    }
+
+    pub fn push(&mut self, object: SchemeType) {
+        self.push_fn.clone().call(vec![object]).unwrap();
+    }
+
+    pub fn build(self) -> SchemeType {
+        self.build_with_tail(environment::empty_list())
+    }
+
+    pub fn build_with_tail(self, object: SchemeType) -> SchemeType {
+        self.res_fn.call(vec![object]).unwrap()
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -121,21 +153,6 @@ impl SchemeType {
             SchemeType::Function(func) => func.clone(),
             _ => return Err(CastError),
         })
-    }
-}
-
-impl From<SchemePair> for SchemeType {
-    fn from(pair: SchemePair) -> Self {
-        pair.into_object().into()
-    }
-}
-
-impl From<Option<SchemePair>> for SchemeType {
-    fn from(pair: Option<SchemePair>) -> SchemeType {
-        match pair {
-            Some(x) => x.into(),
-            None => environment::empty_list(),
-        }
     }
 }
 

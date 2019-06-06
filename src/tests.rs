@@ -17,8 +17,8 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use crate::environment;
 use crate::interperter::eval;
-use crate::types::*;
 
 #[test]
 fn add_zero() {
@@ -64,9 +64,9 @@ fn add_three() {
 
 #[test]
 fn list_fun() {
-    assert_eq!(eval("(list)").unwrap(), get_empty_list().into());
+    assert_eq!(eval("(list)").unwrap(), environment::empty_list().into());
     assert_eq!(
         eval("(equal? (list 1 2 (list 3 4) 5 6) '(1 2 (3 4) 5 6))").unwrap(),
-        get_true().into()
+        environment::s_true().into()
     );
 }

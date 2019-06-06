@@ -19,7 +19,6 @@
 
 use crate::ast::AstNode;
 use crate::parser::ParserError;
-use crate::types::pair::ListFactory;
 use crate::types::*;
 use std::cell::RefCell;
 use std::rc::Rc;

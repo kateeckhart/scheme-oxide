@@ -91,7 +91,9 @@ impl BuiltinMacro {
                             .unwrap_or(false)
                         {
                             if *is_stage_1 {
-                                return Err(CompilerError::syntax("Varargs do not work in stage1."));
+                                return Err(CompilerError::syntax(
+                                    "Varargs do not work in stage1.",
+                                ));
                             }
 
                             let name = terminator.into_symbol().into_compiler_result("lambda")?;

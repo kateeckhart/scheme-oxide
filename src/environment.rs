@@ -23,7 +23,7 @@ macro_rules! bind_scheme {
             thread_local! {
                 static SINGLETON: $crate::types::SchemeType = $gen;
             }
-            SINGLETON.with(Clone::clone)
+            SINGLETON.with(::std::clone::Clone::clone)
         }
     };
     (pub $name:ident @unique) => {
@@ -33,12 +33,24 @@ macro_rules! bind_scheme {
         bind_scheme!(@raw pub $name =
             $crate::interperter::runtime_environment::STAGE1_ENVIRONMENT.with(|env| env.eval_str($scheme)).unwrap());
     };
+    (pub fn $name:ident($( $arg_name:ident ),*) = $scheme:expr) => {
+        pub fn $name($($arg_name: $crate::types::SchemeType),*) -> ::std::result::Result<$crate::types::SchemeType, $crate::interperter::RuntimeError> {
+            bind_scheme!(pub object = $scheme);
+            let fun = object().to_function().unwrap();
+            fun.call(vec![$($arg_name),*])
+        }
+    };
 }
+
 
 bind_scheme!(pub s_true @unique);
 bind_scheme!(pub s_false @unique);
 
 bind_scheme!(pub empty_list = "$empty-list");
-bind_scheme!(pub immutable_pair_type_id = "$immutable-pair-type-id");
-bind_scheme!(pub mutable_pair_type_id = "$mutable-pair-type-id");
+//bind_scheme!(pub immutable_pair_type_id = "$immutable-pair-type-id");
+//bind_scheme!(pub mutable_pair_type_id = "$mutable-pair-type-id");
 bind_scheme!(pub symbol_type_id = "$symbol-type-id");
+
+bind_scheme!(pub fn car(list) = "car");
+bind_scheme!(pub fn cdr(list) = "cdr");
+bind_scheme!(pub fn make_list_factory(is_mutable) = "$make-list-factory");
