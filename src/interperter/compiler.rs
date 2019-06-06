@@ -103,9 +103,15 @@ impl EnvironmentFrame {
         id
     }
 
-    pub fn add_builtin_macros(&mut self) {
-        self.push_builtin_macro(AstSymbol::new("lambda"), BuiltinMacro::Lambda);
-        self.push_builtin_macro(CoreSymbol::Lambda.into(), BuiltinMacro::Lambda);
+    pub fn add_stage0_macros(&mut self) {
+        self.push_builtin_macro(
+            AstSymbol::new("lambda"),
+            BuiltinMacro::Lambda { is_stage_1: true },
+        );
+        self.push_builtin_macro(
+            CoreSymbol::Lambda.into(),
+            BuiltinMacro::Lambda { is_stage_1: true },
+        );
         self.push_builtin_macro(AstSymbol::new("if"), BuiltinMacro::If);
         self.push_builtin_macro(CoreSymbol::If.into(), BuiltinMacro::If);
         self.push_builtin_macro(AstSymbol::new("let"), BuiltinMacro::Let);
@@ -120,12 +126,23 @@ impl EnvironmentFrame {
         self.push_builtin_macro(CoreSymbol::Or.into(), BuiltinMacro::Or);
         self.push_builtin_macro(AstSymbol::new("and"), BuiltinMacro::And);
         self.push_builtin_macro(CoreSymbol::And.into(), BuiltinMacro::And);
-        self.push_builtin_macro(AstSymbol::new("quote"), BuiltinMacro::Quote);
-        self.push_builtin_macro(CoreSymbol::Quote.into(), BuiltinMacro::Quote);
         self.push_builtin_macro(AstSymbol::new("cond"), BuiltinMacro::Cond);
         self.push_builtin_macro(AstSymbol::new("letrec"), BuiltinMacro::LetRec);
         self.push_builtin_macro(CoreSymbol::LetRec.into(), BuiltinMacro::LetRec);
         self.push_builtin_macro(CoreSymbol::BeginProgram.into(), BuiltinMacro::BeginProgram);
+    }
+
+    pub fn add_stage2_macros(&mut self) {
+        self.push_builtin_macro(
+            AstSymbol::new("lambda"),
+            BuiltinMacro::Lambda { is_stage_1: false },
+        );
+        self.push_builtin_macro(
+            CoreSymbol::Lambda.into(),
+            BuiltinMacro::Lambda { is_stage_1: false },
+        );
+        self.push_builtin_macro(AstSymbol::new("quote"), BuiltinMacro::Quote);
+        self.push_builtin_macro(CoreSymbol::Quote.into(), BuiltinMacro::Quote);
     }
 
     fn push_builtin_macro(&mut self, name: AstSymbol, s_macro: BuiltinMacro) {

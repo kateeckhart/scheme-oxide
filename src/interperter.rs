@@ -17,8 +17,8 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use crate::ast::{AstNode, CoreSymbol};
-use crate::parser::{Parser, ParserError};
+use crate::ast::AstNode;
+use crate::parser::ParserError;
 use crate::types::pair::ListFactory;
 use crate::types::*;
 use std::cell::RefCell;
@@ -27,8 +27,8 @@ use std::rc::Rc;
 mod compiler;
 pub use self::compiler::CompilerError;
 
-mod environment;
-use environment::{BaseEnvironment, MAIN_ENVIRONMENT};
+pub mod runtime_environment;
+use runtime_environment::{BaseEnvironment, SCHEME_ENVIRONMENT};
 
 mod builtin;
 use builtin::BuiltinFunction;
@@ -51,10 +51,7 @@ fn eval_with_environment(
 }
 
 pub fn eval(string: &str) -> Result<SchemeType, RuntimeError> {
-    let parsed_nodes: Result<Vec<_>, _> = Parser::new(string).collect();
-    let nodes = vec![CoreSymbol::BeginProgram.into(), parsed_nodes?.into()];
-
-    MAIN_ENVIRONMENT.with(|env| eval_with_environment(nodes.into(), &env))
+    SCHEME_ENVIRONMENT.with(|env| env.eval_str(string))
 }
 
 #[derive(Debug)]

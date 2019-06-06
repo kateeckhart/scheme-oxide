@@ -17,6 +17,7 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use crate::environment;
 use crate::types::*;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -25,15 +26,15 @@ pub struct SchemePair(SchemeObject);
 impl SchemePair {
     pub fn new(mutable: bool, one: SchemeType, two: SchemeType) -> Self {
         let type_id = if mutable {
-            get_mutable_pair_type_id()
+            environment::mutable_pair_type_id()
         } else {
-            get_immutable_pair_type_id()
+            environment::immutable_pair_type_id()
         };
         SchemePair(SchemeObject::new(type_id.into(), vec![one, two]))
     }
 
     pub fn one(mutable: bool, object: SchemeType) -> Self {
-        SchemePair::new(mutable, object, get_empty_list().into())
+        SchemePair::new(mutable, object, environment::empty_list().into())
     }
 
     pub fn set_cdr(&self, cdr: SchemeType) {

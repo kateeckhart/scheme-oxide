@@ -17,6 +17,7 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use crate::environment;
 use crate::types::pair::ListFactory;
 use crate::types::*;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -124,7 +125,7 @@ impl ListType {
 
     fn to_datum(&self) -> SchemeType {
         match self {
-            ListType::Proper => get_empty_list().into(),
+            ListType::Proper => environment::empty_list().into(),
             ListType::Improper(node) => AstNode::from_non_list(node.clone()).to_datum(),
         }
     }

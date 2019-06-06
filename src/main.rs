@@ -24,6 +24,7 @@ use std::io::prelude::*;
 
 mod ast;
 
+mod environment;
 mod parser;
 mod types;
 

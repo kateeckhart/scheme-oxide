@@ -26,7 +26,7 @@ use crate::interperter::vm::{Statement, StatementType};
 
 #[derive(Clone, Debug)]
 pub enum BuiltinMacro {
-    Lambda,
+    Lambda { is_stage_1: bool },
     If,
     Set,
     Begin,
@@ -68,7 +68,7 @@ impl BuiltinMacro {
         state: CompilerState,
     ) -> Result<Vec<CompilerAction>, CompilerError> {
         match self {
-            BuiltinMacro::Lambda => {
+            BuiltinMacro::Lambda { is_stage_1 } => {
                 assert_args("lambda", &args, 2, true)?;
 
                 let raw_formal_list = args.remove(0);
@@ -90,6 +90,10 @@ impl BuiltinMacro {
                             .map(AstList::is_empty_list)
                             .unwrap_or(false)
                         {
+                            if *is_stage_1 {
+                                return Err(CompilerError::syntax("Varargs do not work in stage1."));
+                            }
+
                             let name = terminator.into_symbol().into_compiler_result("lambda")?;
 
                             lambda_builder.add_vargs(name)
@@ -100,7 +104,11 @@ impl BuiltinMacro {
                     .or_else(|node| {
                         node.into_symbol().map(|formal_list| {
                             lambda_builder.add_vargs(formal_list);
-                            Ok(())
+                            if *is_stage_1 {
+                                Err(CompilerError::syntax("Varargs do not work in stage1."))
+                            } else {
+                                Ok(())
+                            }
                         })
                     });
 

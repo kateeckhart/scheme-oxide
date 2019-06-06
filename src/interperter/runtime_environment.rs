@@ -28,6 +28,7 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::rc::Rc;
 
+#[derive(Clone)]
 pub struct BaseEnvironment {
     pub frame: EnvironmentFrame,
     pub bounded: Vec<Rc<RefCell<SchemeType>>>,
@@ -39,6 +40,17 @@ impl BaseEnvironment {
             frame: EnvironmentFrame::new(),
             bounded: Vec::new(),
         }
+    }
+
+    pub fn eval(&self, statement: AstNode) -> Result<SchemeType, RuntimeError> {
+        eval_with_environment(statement, self)
+    }
+
+    pub fn eval_str(&self, string: &str) -> Result<SchemeType, RuntimeError> {
+        let parsed_nodes: Result<Vec<_>, _> = Parser::new(string).collect();
+        let nodes = vec![CoreSymbol::BeginProgram.into(), parsed_nodes?.into()];
+
+        self.eval(nodes.into())
     }
 
     fn push_object(&mut self, name: AstSymbol, object: SchemeType) {
@@ -54,30 +66,33 @@ impl BaseEnvironment {
     }
 
     fn push_eval(&mut self, name: AstSymbol, expression: AstNode) -> Result<(), RuntimeError> {
-        let object = eval_with_environment(expression, self)?;
+        let object = self.eval(expression)?;
 
         self.push_object(name, object);
         Ok(())
     }
+
+    fn push_lib_file(&mut self, file: &str) -> Result<(), RuntimeError> {
+        let define_symbol = AstSymbol::new("define");
+        for raw_statement in Parser::new(file) {
+            let mut statement = raw_statement.unwrap().into_proper_list().unwrap();
+
+            if let Some(true) = statement[0].as_symbol().map(|x| *x == define_symbol) {
+                statement.remove(0);
+                let (symbol, expr) = parse_define(statement)?;
+                self.push_eval(symbol, expr)?
+            } else {
+                self.eval(statement.into())?;
+            }
+        }
+        Ok(())
+    }
 }
 
-fn gen_scheme_environment() -> BaseEnvironment {
+fn gen_stage0_environment() -> BaseEnvironment {
     let mut ret = BaseEnvironment::new();
 
-    ret.frame.add_builtin_macros();
-
-    ret.push_object(
-        AstSymbol::new("$immutable-pair-type-id"),
-        get_immutable_pair_type_id().into(),
-    );
-    ret.push_object(
-        AstSymbol::new("$mutable-pair-type-id"),
-        get_mutable_pair_type_id().into(),
-    );
-    ret.push_object(
-        AstSymbol::new("$symbol-type-id"),
-        get_symbol_type_id().into(),
-    );
+    ret.frame.add_stage0_macros();
 
     let newline_str: SchemeString = "\n".parse().unwrap();
     ret.push_object(AstSymbol::new("$newline-str"), newline_str.into());
@@ -156,29 +171,30 @@ fn gen_scheme_environment() -> BaseEnvironment {
     ret.push_builtin_function(AstSymbol::new("string?"), BuiltinFunction::IsString);
     ret.push_builtin_function(AstSymbol::new("write-char"), BuiltinFunction::WriteChar);
 
-    let raw_std_lib = include_str!("../../scheme-src/std-lib.scm");
-    let define_symbol = AstSymbol::new("define");
-    for raw_statement in Parser::new(raw_std_lib) {
-        let mut statement = raw_statement.unwrap().into_proper_list().unwrap();
+    ret
+}
 
-        if let Some(true) = statement[0].as_symbol().map(|x| *x == define_symbol) {
-            statement.remove(0);
-            let (symbol, expr) = parse_define(statement).unwrap();
-            ret.push_eval(symbol, expr).unwrap()
-        } else {
-            eval_with_environment(statement.into(), &ret).unwrap();
-        }
-    }
+fn gen_stage1_environment() -> BaseEnvironment {
+    let mut ret = gen_stage0_environment();
+
+    ret.push_lib_file(include_str!("../../scheme-src/stage1.scm"))
+        .unwrap();
 
     ret
 }
 
-fn gen_main_environment() -> BaseEnvironment {
-    gen_scheme_environment()
+fn gen_scheme_environment() -> BaseEnvironment {
+    let mut ret = STAGE1_ENVIRONMENT.with(Clone::clone);
+
+    ret.frame.add_stage2_macros();
+    ret.push_lib_file(include_str!("../../scheme-src/std-lib.scm"))
+        .unwrap();
+
+    ret
 }
 
 thread_local! {
-    pub static SCHEME_ENVIORNMENT: BaseEnvironment = gen_scheme_environment();
+    pub static STAGE1_ENVIRONMENT: BaseEnvironment = gen_stage1_environment();
 
-    pub static MAIN_ENVIRONMENT: BaseEnvironment = gen_main_environment();
+    pub static SCHEME_ENVIRONMENT: BaseEnvironment = gen_scheme_environment();
 }

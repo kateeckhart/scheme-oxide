@@ -17,6 +17,8 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use crate::environment;
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 pub mod pair;
@@ -27,24 +29,6 @@ pub use self::object::SchemeObject;
 mod string;
 pub use self::string::SchemeString;
 pub use self::string::StringSetError;
-
-macro_rules! gen_singleton {
-    (pub $name:ident) => {
-        pub fn $name() -> SchemeObject {
-            thread_local! {
-                static SINGLETON: SchemeObject = SchemeObject::unique_new()
-            }
-            SINGLETON.with(Clone::clone)
-        }
-    };
-}
-
-gen_singleton!(pub get_empty_list);
-gen_singleton!(pub get_immutable_pair_type_id);
-gen_singleton!(pub get_mutable_pair_type_id);
-gen_singleton!(pub get_true);
-gen_singleton!(pub get_false);
-gen_singleton!(pub get_symbol_type_id);
 
 pub fn new_symbol(name: String) -> SchemeObject {
     thread_local! {
@@ -58,7 +42,7 @@ pub fn new_symbol(name: String) -> SchemeObject {
             .entry(name.clone())
             .or_insert_with(|| {
                 SchemeObject::new(
-                    get_symbol_type_id().into(),
+                    environment::symbol_type_id(),
                     vec![SchemeType::String(name.parse().unwrap())],
                 )
             })
@@ -129,7 +113,7 @@ impl SchemeType {
     }
 
     pub fn to_bool(&self) -> bool {
-        !(*self == get_false().into())
+        !(*self == environment::s_false().into())
     }
 
     pub fn to_function(&self) -> Result<FunctionRef, CastError> {
@@ -150,7 +134,7 @@ impl From<Option<SchemePair>> for SchemeType {
     fn from(pair: Option<SchemePair>) -> SchemeType {
         match pair {
             Some(x) => x.into(),
-            None => get_empty_list().into(),
+            None => environment::empty_list(),
         }
     }
 }
@@ -176,9 +160,9 @@ impl From<SchemeString> for SchemeType {
 impl From<bool> for SchemeType {
     fn from(is_true: bool) -> Self {
         if is_true {
-            get_true().into()
+            environment::s_true()
         } else {
-            get_false().into()
+            environment::s_false()
         }
     }
 }

@@ -18,6 +18,7 @@
 */
 
 use super::RuntimeError;
+use crate::environment;
 use crate::interperter::vm::StackFrame;
 use crate::types::*;
 use std::cmp::Ordering;
@@ -49,7 +50,7 @@ pub enum BuiltinFunction {
 }
 
 fn gen_unspecified() -> SchemeType {
-    get_false().into()
+    environment::s_false()
 }
 
 fn assert_args<T>(args: &[T], argc: usize, is_vargs: bool) -> Result<(), RuntimeError> {
@@ -100,12 +101,12 @@ impl BuiltinFunction {
 
                 let mut iter = args.into_iter();
                 let mut current = iter.next().unwrap().to_number()?;
-                let mut ret = get_true();
+                let mut ret = environment::s_true();
                 for raw_num in iter {
                     let num = raw_num.to_number()?;
                     let res = current.cmp(&num);
                     if (res == mode) == invert {
-                        ret = get_false();
+                        ret = environment::s_false();
                         break;
                     }
                     current = num;
