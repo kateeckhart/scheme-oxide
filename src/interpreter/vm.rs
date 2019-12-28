@@ -17,10 +17,12 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use super::{DerivedFunctionRef, FunctionRef, FunctionRefInner, RuntimeError};
-use crate::types::*;
 use std::cell::RefCell;
 use std::rc::Rc;
+
+use crate::types::*;
+
+use super::{DerivedFunctionRef, FunctionRef, FunctionRefInner, RuntimeError};
 
 #[derive(Copy, Clone, Debug)]
 pub struct Statement {

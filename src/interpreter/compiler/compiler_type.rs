@@ -17,11 +17,12 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use super::{
-    compile_one, BuiltinMacro, CompilerAction, CompilerError, CompilerState, PartialFunction,
-};
 use crate::ast::{AstNode, AstSymbol, CoreSymbol};
-use crate::interperter::vm::{Statement, StatementType};
+use crate::interpreter::vm::{Statement, StatementType};
+
+use super::{
+    BuiltinMacro, compile_one, CompilerAction, CompilerError, CompilerState, PartialFunction,
+};
 
 #[derive(Clone, Debug)]
 pub enum CompilerType {

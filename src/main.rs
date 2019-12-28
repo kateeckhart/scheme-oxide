@@ -17,10 +17,11 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use getopts::Options;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
+
+use getopts::Options;
 
 mod ast;
 
@@ -28,7 +29,7 @@ mod environment;
 mod parser;
 mod types;
 
-mod interperter;
+mod interpreter;
 
 #[cfg(test)]
 mod tests;
@@ -63,5 +64,5 @@ fn main() {
     let mut prog = String::new();
     file.read_to_string(&mut prog).unwrap();
 
-    println!("{:?}", interperter::eval(&prog).unwrap());
+    println!("{:?}", interpreter::eval(&prog).unwrap());
 }

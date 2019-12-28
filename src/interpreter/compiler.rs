@@ -17,20 +17,20 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use crate::ast::{AstListBuilder, AstNode, AstSymbol, CoreSymbol};
-use crate::interperter::vm::{SchemeFunction, Statement, StatementType};
 use std::collections::HashMap;
 use std::mem::replace;
 
-mod s_macro;
-use self::s_macro::BuiltinMacro;
+use crate::ast::{AstListBuilder, AstNode, AstSymbol, CoreSymbol};
+use crate::interpreter::vm::{SchemeFunction, Statement, StatementType};
 
-mod compiler_type;
 use self::compiler_type::CompilerType;
-
-mod error;
 use self::error::AstCastErrorImpl;
 pub use self::error::CompilerError;
+use self::s_macro::BuiltinMacro;
+
+mod s_macro;
+mod compiler_type;
+mod error;
 
 fn compile_one<T>(node: AstNode, state: CompilerState) -> Result<Vec<CompilerAction>, T> {
     Ok(vec![CompilerAction::Compile { expr: node, state }])

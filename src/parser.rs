@@ -17,9 +17,11 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-mod tokenizer;
-use self::tokenizer::{Block, Mark, Token, Tokenizer, TokenizerError};
 use crate::ast::{AstListBuilder, AstNode, AstSymbol};
+
+use self::tokenizer::{Block, Mark, Token, Tokenizer, TokenizerError};
+
+mod tokenizer;
 
 enum ParserToken {
     PartialList(AstListBuilder),
@@ -72,8 +74,8 @@ fn unescape_string(string: &str) -> Result<String, ParserError> {
     let mut new_string = String::new();
     let mut iterator = string.chars();
 
-    while let Some(charecter) = iterator.next() {
-        if charecter == '\\' {
+    while let Some(character) = iterator.next() {
+        if character == '\\' {
             let escape = iterator.next().unwrap();
             let escaped_char = match escape {
                 '\\' => '\\',
@@ -82,7 +84,7 @@ fn unescape_string(string: &str) -> Result<String, ParserError> {
             };
             new_string.push(escaped_char);
         } else {
-            new_string.push(charecter)
+            new_string.push(character)
         }
     }
     new_string.shrink_to_fit();

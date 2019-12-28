@@ -18,7 +18,7 @@
 */
 
 use crate::environment;
-use crate::interperter::eval;
+use crate::interpreter::eval;
 
 #[test]
 fn add_zero() {

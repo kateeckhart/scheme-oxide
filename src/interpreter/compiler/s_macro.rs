@@ -17,12 +17,13 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use super::{
-    compile_one, error::AstCastErrorImpl, CompilerAction, CompilerError, CompilerState,
-    CompilerType, LambdaBuilder, LetDef, PartialFunction,
-};
 use crate::ast::{AstList, AstNode, AstSymbol, CoreSymbol};
-use crate::interperter::vm::{Statement, StatementType};
+use crate::interpreter::vm::{Statement, StatementType};
+
+use super::{
+    compile_one, CompilerAction, CompilerError, CompilerState, CompilerType,
+    error::AstCastErrorImpl, LambdaBuilder, LetDef, PartialFunction,
+};
 
 #[derive(Clone, Debug)]
 pub enum BuiltinMacro {

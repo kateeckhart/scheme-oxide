@@ -17,8 +17,9 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use lazy_static::lazy_static;
 use regex::Regex;
+
+use lazy_static::lazy_static;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Block {
@@ -46,31 +47,28 @@ fn gen_regex() -> Regex {
     let comment = "(?:;.*)";
     let whitespace = format!("(?:[[:space:]]|{})", comment);
 
-    let delimer = format!(r#"(?:{}|[()";]|$)"#, whitespace);
+    let delmer = format!(r#"(?:{}|[()";]|$)"#, whitespace);
 
-    let special_inital = "[!$%&*/:<=>?^_~]";
+    let special_initial = "[!$%&*/:<=>?^_~]";
     let special_subsequent = "[+.@-]";
-    let inital = format!("(?:[[:alpha:]]|{})", special_inital);
-    let subsequent = format!("(?:[0-9]|{}|{})", inital, special_subsequent);
-    let normal_symbol = format!("(?:{}{}*)", inital, subsequent);
+    let initial = format!("(?:[[:alpha:]]|{})", special_initial);
+    let subsequent = format!("(?:[0-9]|{}|{})", initial, special_subsequent);
+    let normal_symbol = format!("(?:{}{}*)", initial, subsequent);
 
     let odd_symbol = r"(?:[+-]|\.{3})";
-    let symbol = format!(
-        "(?:(?P<symbol>{}|{}){})",
-        normal_symbol, odd_symbol, delimer
-    );
+    let symbol = format!("(?:(?P<symbol>{}|{}){})", normal_symbol, odd_symbol, delmer);
 
     let string_body = |id| format!(r#"(?P<{}Body>(?:[^"\\\n]|\\.)*)"#, id);
     let good_string = format!(r#"(?:"{}")"#, string_body("goodString"));
     let bad_eof_string = format!(r#"(?:"{}\\?$)"#, string_body("badEofString"));
 
-    let number = format!(r"(?:(?P<number>(?:\+|-)?[0-9]+){})", delimer);
+    let number = format!(r"(?:(?P<number>(?:\+|-)?[0-9]+){})", delmer);
 
     let block = r"(?P<block>\(|\))";
 
-    let boolean = format!("(?:(?P<boolean>#t|#f){})", delimer);
+    let boolean = format!("(?:(?P<boolean>#t|#f){})", delmer);
 
-    let dot = format!(r"(?:(?P<dot>\.){})", delimer);
+    let dot = format!(r"(?:(?P<dot>\.){})", delmer);
 
     let mark = "(?P<mark>')";
 

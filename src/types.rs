@@ -17,16 +17,18 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use crate::environment;
-
-use crate::interperter::FunctionRef;
 use std::cell::RefCell;
 use std::collections::HashMap;
-mod object;
+
+use crate::environment;
+use crate::interpreter::FunctionRef;
+
 pub use self::object::SchemeObject;
-mod string;
 pub use self::string::SchemeString;
 pub use self::string::StringSetError;
+
+mod object;
+mod string;
 
 pub fn new_symbol(name: String) -> SchemeObject {
     thread_local! {
@@ -145,7 +147,7 @@ impl SchemeType {
     }
 
     pub fn to_bool(&self) -> bool {
-        !(*self == environment::s_false().into())
+        *self != environment::s_false().into()
     }
 
     pub fn to_function(&self) -> Result<FunctionRef, CastError> {

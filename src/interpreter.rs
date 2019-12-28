@@ -17,23 +17,23 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use crate::ast::AstNode;
-use crate::parser::ParserError;
-use crate::types::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-mod compiler;
+use builtin::BuiltinFunction;
+use runtime_environment::{BaseEnvironment, SCHEME_ENVIRONMENT};
+use vm::{run_vm, SchemeFunction, StackFrame};
+
+use crate::ast::AstNode;
+use crate::parser::ParserError;
+use crate::types::*;
+
 pub use self::compiler::CompilerError;
 
+mod compiler;
 pub mod runtime_environment;
-use runtime_environment::{BaseEnvironment, SCHEME_ENVIRONMENT};
-
 mod builtin;
-use builtin::BuiltinFunction;
-
 mod vm;
-use vm::{run_vm, SchemeFunction, StackFrame};
 
 fn eval_with_environment(
     nodes: AstNode,

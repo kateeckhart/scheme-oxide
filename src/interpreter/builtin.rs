@@ -17,11 +17,13 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use super::RuntimeError;
-use crate::environment;
-use crate::interperter::vm::StackFrame;
-use crate::types::*;
 use std::cmp::Ordering;
+
+use crate::environment;
+use crate::interpreter::vm::StackFrame;
+use crate::types::*;
+
+use super::RuntimeError;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum BuiltinFunction {

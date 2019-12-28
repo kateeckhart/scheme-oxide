@@ -31,17 +31,16 @@ macro_rules! bind_scheme {
     };
     (pub $name:ident = $scheme:expr) => {
         bind_scheme!(@raw pub $name =
-            $crate::interperter::runtime_environment::STAGE1_ENVIRONMENT.with(|env| env.eval_str($scheme)).unwrap());
+            $crate::interpreter::runtime_environment::STAGE1_ENVIRONMENT.with(|env| env.eval_str($scheme)).unwrap());
     };
     (pub fn $name:ident($( $arg_name:ident ),*) = $scheme:expr) => {
-        pub fn $name($($arg_name: $crate::types::SchemeType),*) -> ::std::result::Result<$crate::types::SchemeType, $crate::interperter::RuntimeError> {
+        pub fn $name($($arg_name: $crate::types::SchemeType),*) -> ::std::result::Result<$crate::types::SchemeType, $crate::interpreter::RuntimeError> {
             bind_scheme!(pub object = $scheme);
             let fun = object().to_function().unwrap();
             fun.call(vec![$($arg_name),*])
         }
     };
 }
-
 
 bind_scheme!(pub s_true @unique);
 bind_scheme!(pub s_false @unique);
