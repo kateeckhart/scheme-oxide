@@ -30,9 +30,9 @@ use crate::types::*;
 
 pub use self::compiler::CompilerError;
 
+mod builtin;
 mod compiler;
 pub mod runtime_environment;
-mod builtin;
 mod vm;
 
 fn eval_with_environment(
@@ -168,7 +168,7 @@ impl DerivedFunctionRef {
             for extra_param in args {
                 extra_params.push(extra_param)
             }
-            env.push(Rc::new(RefCell::new(extra_params.build().into())))
+            env.push(Rc::new(RefCell::new(extra_params.build())))
         }
 
         for capture in self.captures {

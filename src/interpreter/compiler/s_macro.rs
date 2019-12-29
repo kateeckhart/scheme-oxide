@@ -230,7 +230,7 @@ impl BuiltinMacro {
                         let binding_list =
                             vec![vec![name.clone().into(), lambda_def.into()].into()].into();
 
-                        let mut func_call = vec![name.clone().into()];
+                        let mut func_call = vec![name.into()];
                         func_call.append(&mut bindings);
 
                         let outer_binding =

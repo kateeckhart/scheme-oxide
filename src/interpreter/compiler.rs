@@ -28,9 +28,9 @@ use self::error::AstCastErrorImpl;
 pub use self::error::CompilerError;
 use self::s_macro::BuiltinMacro;
 
-mod s_macro;
 mod compiler_type;
 mod error;
+mod s_macro;
 
 fn compile_one<T>(node: AstNode, state: CompilerState) -> Result<Vec<CompilerAction>, T> {
     Ok(vec![CompilerAction::Compile { expr: node, state }])
@@ -200,7 +200,7 @@ impl PartialFunction {
     fn lookup(&mut self, name: &AstSymbol) -> Result<CompilerType, CompilerError> {
         if let Some(ident) = self.environment.lookup(name) {
             //Simple case: Variable has already been declared/looked up
-            return Ok(ident);
+            Ok(ident)
         } else {
             let s_macro = self.traverse_macro(name)?;
             Ok(s_macro.be_captured(name, self))

@@ -84,20 +84,18 @@ impl BuiltinFunction {
                 }
                 Ok(Some(SchemeType::Number(product)))
             }
-            BuiltinFunction::Sub => {
-                if args.len() == 1 {
-                    Ok(Some(SchemeType::Number(-args[0].to_number()?)))
-                } else if args.len() > 1 {
+            BuiltinFunction::Sub => match args.len() {
+                1 => Ok(Some(SchemeType::Number(-args[0].to_number()?))),
+                2..=std::usize::MAX => {
                     let mut iter = args.into_iter();
                     let mut difference = iter.next().unwrap().to_number()?;
                     for number in iter {
                         difference -= number.to_number()?
                     }
                     Ok(Some(SchemeType::Number(difference)))
-                } else {
-                    Err(RuntimeError::ArgError)
                 }
-            }
+                _ => Err(RuntimeError::ArgError),
+            },
             BuiltinFunction::Compare { invert, mode } => {
                 assert_args(&args, 2, true)?;
 
@@ -113,7 +111,7 @@ impl BuiltinFunction {
                     }
                     current = num;
                 }
-                Ok(Some(ret.into()))
+                Ok(Some(ret))
             }
             BuiltinFunction::Eqv => {
                 assert_args(&args, 2, false)?;

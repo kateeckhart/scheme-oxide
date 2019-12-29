@@ -147,7 +147,7 @@ impl SchemeType {
     }
 
     pub fn to_bool(&self) -> bool {
-        *self != environment::s_false().into()
+        *self != environment::s_false()
     }
 
     pub fn to_function(&self) -> Result<FunctionRef, CastError> {

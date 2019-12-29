@@ -17,9 +17,13 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use AstNodeInner::*;
+use AstNodeNonList::{Bool, Number, String as SchemeString, Symbol};
+
 use crate::environment;
 use crate::types::*;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CoreSymbol {
@@ -124,7 +128,7 @@ impl ListType {
 
     fn to_datum(&self) -> SchemeType {
         match self {
-            ListType::Proper => environment::empty_list().into(),
+            ListType::Proper => environment::empty_list(),
             ListType::Improper(node) => AstNode::from_non_list(node.clone()).to_datum(),
         }
     }
@@ -239,9 +243,6 @@ enum AstNodeInner {
 #[derive(Clone, Debug, PartialEq)]
 pub struct AstNode(AstNodeInner);
 
-use AstNodeInner::*;
-use AstNodeNonList::{Bool, Number, String as SchemeString, Symbol};
-
 impl AstNode {
     fn from_non_list(non_list: AstNodeNonList) -> AstNode {
         AstNode(NonList(non_list))
@@ -271,7 +272,7 @@ impl AstNode {
                     builder.push(node.to_datum())
                 }
 
-                builder.build_with_tail(list.list_type.to_datum()).into()
+                builder.build_with_tail(list.list_type.to_datum())
             }
             NonList(Bool(is_true)) => (*is_true).into(),
         }

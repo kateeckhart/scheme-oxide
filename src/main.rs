@@ -26,6 +26,7 @@ use getopts::Options;
 mod ast;
 
 mod environment;
+mod gc;
 mod parser;
 mod types;
 

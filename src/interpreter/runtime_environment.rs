@@ -17,16 +17,18 @@
     along with scheme-oxide.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use super::{
-    compiler::parse_define, compiler::EnvironmentFrame, eval_with_environment, BuiltinFunction,
-    FunctionRef, FunctionRefInner, RuntimeError,
-};
-use crate::ast::{AstNode, AstSymbol, CoreSymbol};
-use crate::parser::Parser;
-use crate::types::*;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::rc::Rc;
+
+use crate::ast::{AstNode, AstSymbol, CoreSymbol};
+use crate::parser::Parser;
+use crate::types::*;
+
+use super::{
+    BuiltinFunction, compiler::EnvironmentFrame, compiler::parse_define, eval_with_environment,
+    FunctionRef, FunctionRefInner, RuntimeError,
+};
 
 #[derive(Clone)]
 pub struct BaseEnvironment {
