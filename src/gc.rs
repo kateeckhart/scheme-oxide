@@ -22,46 +22,63 @@ use std::alloc::Layout;
 use std::cell::{Cell, RefCell};
 use std::marker::PhantomData;
 use std::mem;
-use std::mem::align_of;
 use std::ptr;
 
 pub unsafe trait Traceable: Sized {
-    fn for_each_pointer<T>(&mut self, _: T)
-        where
-            T: FnMut(&mut *mut GcObjHead),
-    {}
-
-    fn size(&mut self) -> usize {
-        mem::size_of::<GcObj<Self>>()
+    unsafe fn for_each_pointer<T>(&self, _: T)
+    where
+        T: FnMut(*const GcObjHead) -> *const GcObjHead,
+    {
     }
+
+    fn extra_size(&self) -> usize {
+        0
+    }
+
+    fn init_extra(&mut self) {}
 
     fn get_vtable() -> &'static GcVtable;
 
     fn gen_vtable() -> GcVtable {
         unsafe {
             GcVtable {
-                size: |head| GcObj::<Self>::mut_from_head(head).inner.size(),
+                size: |head| traceable_size(&*GcObjHead::downcast_ptr::<Self>(head)),
                 mark: |head, current_mark| {
-                    GcObj::<Self>::mut_from_head(head)
+                    (*GcObjHead::downcast_ptr::<Self>(head))
                         .inner
                         .for_each_pointer(|child| {
-                            let child_ref = &mut **child;
-                            if child_ref.forward.is_null() {
-                                child_ref.forward = *current_mark;
-                                *current_mark = *child;
+                            let child_ref = &*child;
+                            if child_ref.forward.get().is_null() {
+                                child_ref.forward.set(*current_mark);
+                                *current_mark = child;
                             }
+                            child
                         })
                 },
                 update: |head| {
-                    GcObj::<Self>::mut_from_head(head)
+                    (*GcObjHead::downcast_ptr::<Self>(head))
                         .inner
-                        .for_each_pointer(|child| {
-                            *child = (**child).forward;
-                        })
+                        .for_each_pointer(|child| (*child).forward.get())
                 },
             }
         }
     }
+}
+
+fn round_to_align(size: usize, align: usize) -> usize {
+    let rem = size % align;
+    if rem != 0 {
+        size + align - rem
+    } else {
+        size
+    }
+}
+
+fn traceable_size<T>(obj: &GcObj<T>) -> usize
+where
+    T: Traceable,
+{
+    round_to_align(mem::size_of::<GcObj<T>>() + obj.inner.extra_size(), 8)
 }
 
 #[cfg(test)]
@@ -69,12 +86,12 @@ mod test;
 
 #[derive(Copy, Clone)]
 enum RootEntry {
-    Object(*mut GcObjHead),
+    Object(*const GcObjHead),
     Free(usize),
 }
 
 impl RootEntry {
-    fn to_option(self) -> Option<*mut GcObjHead> {
+    fn to_option(self) -> Option<*const GcObjHead> {
         match self {
             RootEntry::Object(obj) => Some(obj),
             RootEntry::Free(_) => None,
@@ -88,7 +105,7 @@ impl RootEntry {
         }
     }
 
-    fn mut_option(&mut self) -> Option<&mut *mut GcObjHead> {
+    fn mut_option(&mut self) -> Option<&mut *const GcObjHead> {
         match self {
             RootEntry::Object(obj) => Some(obj),
             RootEntry::Free(_) => None,
@@ -97,29 +114,33 @@ impl RootEntry {
 }
 
 struct RootObject<'a, T>
-    where
-        T: Traceable,
+where
+    T: Traceable,
 {
     heap: &'a GcHeap,
     index: usize,
-    _phantom: PhantomData<*mut GcObj<T>>,
+    _phantom: PhantomData<*const GcObj<T>>,
 }
 
 impl<'a, T> RootObject<'a, T>
-    where
-        T: Traceable,
+where
+    T: Traceable,
 {
-    fn to_ptr(&self) -> *mut GcObj<T> {
+    fn to_ptr(&self) -> *const GcObj<T> {
         self.heap.roots.borrow()[self.index]
             .to_option()
             .unwrap()
             .cast::<GcObj<T>>()
     }
+
+    unsafe fn to_ref(&self) -> &GcObj<T> {
+        &*self.to_ptr()
+    }
 }
 
 impl<'a, T> Clone for RootObject<'a, T>
-    where
-        T: Traceable,
+where
+    T: Traceable,
 {
     fn clone(&self) -> Self {
         unsafe { self.heap.make_root(self.to_ptr()) }
@@ -127,12 +148,12 @@ impl<'a, T> Clone for RootObject<'a, T>
 }
 
 impl<'a, T> Drop for RootObject<'a, T>
-    where
-        T: Traceable,
+where
+    T: Traceable,
 {
     fn drop(&mut self) {
         unsafe {
-            (*self.to_ptr()).head.forward = ptr::null_mut();
+            (*self.to_ptr()).head.forward.set(ptr::null());
         }
         let mut roots = self.heap.roots.borrow_mut();
         roots[self.index] = RootEntry::Free(self.heap.free_root.get());
@@ -150,45 +171,65 @@ struct GcHeap {
 }
 
 pub struct GcVtable {
-    size: unsafe fn(&mut GcObjHead) -> usize,
-    mark: unsafe fn(&mut GcObjHead, &mut *mut GcObjHead),
-    update: unsafe fn(&mut GcObjHead),
+    size: unsafe fn(&GcObjHead) -> usize,
+    mark: unsafe fn(&GcObjHead, &mut *const GcObjHead),
+    update: unsafe fn(&GcObjHead),
 }
 
 pub struct GcObjHead {
     vtable: &'static GcVtable,
-    forward: *mut GcObjHead,
+    forward: Cell<*const GcObjHead>,
 }
 
-#[repr(C)]
-pub struct GcObj<T>
+impl GcObjHead {
+    unsafe fn downcast_ref<T>(&self) -> &GcObj<T>
     where
         T: Traceable,
+    {
+        &*(self as *const _ as *const GcObj<T>)
+    }
+
+    // Self must be a GcObj<T>
+    fn downcast_ptr<T>(ptr: *const Self) -> *const GcObj<T>
+    where
+        T: Traceable,
+    {
+        ptr as *const GcObj<T>
+    }
+}
+
+#[repr(C, align(8))]
+pub struct GcObj<T>
+where
+    T: Traceable,
 {
     head: GcObjHead,
     inner: T,
 }
 
 impl<T> GcObj<T>
-    where
-        T: Traceable,
+where
+    T: Traceable,
 {
-    unsafe fn mut_from_head(head: &mut GcObjHead) -> &mut GcObj<T> {
-        &mut *(head as *mut _ as *mut GcObj<T>)
-    }
-}
-
-fn round_to_align(align: usize, size: usize) -> usize {
-    if size % align != 0 {
-        size + align
-    } else {
-        size
+    fn erase_ptr(ptr: *const Self) -> *const GcObjHead {
+        ptr as *const GcObjHead
     }
 }
 
 impl GcHeap {
     fn new(heap_size: usize, root_count: usize) -> Self {
-        let layout = alloc::Layout::from_size_align(heap_size, mem::align_of::<usize>()).unwrap();
+        // Insure that an alignment of 8 allows
+        // pointers, integers of at most 64 bits, and doubles
+        // to exist without any extra padding
+        // Should be true on almost every platform rust targets
+        assert!(mem::align_of::<usize>() <= 8);
+        assert!(mem::align_of::<f64>() <= 8);
+        assert!(mem::align_of::<u64>() <= 8);
+
+        if heap_size % 8 != 0 {
+            panic!("Heap must be alligned to eight bytes.");
+        }
+        let layout = alloc::Layout::from_size_align(heap_size, 8).unwrap();
 
         let ptr = unsafe { alloc::alloc(layout) };
         if ptr.is_null() {
@@ -214,31 +255,33 @@ impl GcHeap {
     }
 
     unsafe fn collect(&self) {
-        let mut end_maker: usize = 0;
-        let mut current_mark = &mut end_maker as *mut _ as *mut GcObjHead;
+        let end_marker: *const _ = ptr::NonNull::dangling().as_ptr();
+        let mut current_mark = end_marker;
 
         for root in self.roots.borrow().iter().filter_map(|x| x.to_option()) {
-            let head = &mut *root;
-            if head.forward.is_null() {
-                head.forward = current_mark;
+            let head = &*root;
+            if head.forward.get().is_null() {
+                head.forward.set(current_mark);
                 current_mark = root;
             }
         }
 
-        while !ptr::eq(&end_maker as *const _ as *const GcObjHead, current_mark) {
-            let head = &mut *current_mark;
-            mem::swap(&mut head.forward, &mut current_mark);
+        while !ptr::eq(end_marker, current_mark) {
+            let head = &*current_mark;
+            head.forward.swap(Cell::from_mut(&mut current_mark));
             (head.vtable.mark)(head, &mut current_mark);
         }
         let heap_end = self.free.get();
         let mut current_obj = self.begin.get();
         let mut free = self.begin.get();
         while current_obj < heap_end {
-            let current_head = &mut *(current_obj as *mut () as *mut GcObjHead);
+            let current_head = &*(current_obj as *const () as *const GcObjHead);
             let size = (current_head.vtable.size)(current_head);
-            if !current_head.forward.is_null() {
-                current_head.forward = free as *mut () as *mut GcObjHead;
-                free = (free as usize + size) as *mut u8;
+            if !current_head.forward.get().is_null() {
+                current_head
+                    .forward
+                    .set(free as *const () as *const GcObjHead);
+                free = free.add(size);
             }
             current_obj = current_obj.add(size);
         }
@@ -246,7 +289,7 @@ impl GcHeap {
 
         current_obj = self.begin.get();
         while current_obj < heap_end {
-            let current_head = &mut *(current_obj as *mut () as *mut GcObjHead);
+            let current_head = &*(current_obj as *const () as *const GcObjHead);
             (current_head.vtable.update)(current_head);
             current_obj = current_obj.add((current_head.vtable.size)(current_head))
         }
@@ -256,17 +299,17 @@ impl GcHeap {
             .borrow_mut()
             .iter_mut()
             .filter_map(RootEntry::mut_option)
-            {
-                *root = (**root).forward;
-            }
+        {
+            *root = (**root).forward.get();
+        }
 
         current_obj = self.begin.get();
         free = self.begin.get();
         while current_obj < heap_end {
             let (size, is_dead) = {
-                let head = &mut *(current_obj as *mut () as *mut GcObjHead);
-                let is_dead = head.forward.is_null();
-                head.forward = ptr::null_mut();
+                let head = &*(current_obj as *const () as *const GcObjHead);
+                let is_dead = head.forward.get().is_null();
+                head.forward.set(ptr::null());
                 ((head.vtable.size)(head), is_dead)
             };
 
@@ -280,9 +323,9 @@ impl GcHeap {
 
     // Obj must point to an object that either is not moved for the live time of the return type
     // or obj must point to an object on the gc heap.
-    unsafe fn make_root<T>(&self, obj: *mut GcObj<T>) -> RootObject<T>
-        where
-            T: Traceable,
+    unsafe fn make_root<T>(&self, obj: *const GcObj<T>) -> RootObject<T>
+    where
+        T: Traceable,
     {
         let mut roots = self.roots.borrow_mut();
         let free_root = self.free_root.get();
@@ -290,7 +333,7 @@ impl GcHeap {
             panic!("Out of roots.")
         }
         let new_free = roots[free_root].get_free().unwrap();
-        roots[free_root] = RootEntry::Object(obj as *mut GcObjHead);
+        roots[free_root] = RootEntry::Object(obj as *const GcObjHead);
         self.free_root.set(new_free);
 
         RootObject {
@@ -303,20 +346,20 @@ impl GcHeap {
     // After the call to put_on_heap, all pointers to the heap
     // except for pointers on objects traceable from the roots
     // and the pointers in new_obj are invalid.
-    unsafe fn put_on_heap<T>(&self, mut new_obj: T) -> Result<RootObject<T>, ()>
-        where
-            T: Traceable,
+    unsafe fn put_on_heap<T>(&self, new_obj: T) -> Result<RootObject<T>, ()>
+    where
+        T: Traceable,
     {
         let head = GcObjHead {
             vtable: T::get_vtable(),
-            forward: ptr::null_mut(),
+            forward: Cell::new(ptr::null()),
         };
-        let size = new_obj.size();
-        let mut obj = GcObj {
+        let obj = GcObj {
             head,
             inner: new_obj,
         };
-        let root_ref = self.make_root(&mut obj);
+        let size = traceable_size(&obj);
+        let root_ref = self.make_root(&obj);
 
         if size > self.free_space() {
             self.collect();
@@ -328,6 +371,7 @@ impl GcHeap {
         let ret = self.free.get() as *mut GcObj<T>;
         drop(root_ref);
         ptr::write(ret, obj);
+        (*ret).inner.init_extra();
         self.free.set(self.free.get().add(size));
 
         Ok(self.make_root(ret))
@@ -337,7 +381,7 @@ impl GcHeap {
 impl Drop for GcHeap {
     fn drop(&mut self) {
         let size = self.end.get() as usize - self.begin.get() as usize;
-        let layout = Layout::from_size_align(size, align_of::<usize>()).unwrap();
+        let layout = Layout::from_size_align(size, 8).unwrap();
         unsafe { alloc::dealloc(self.begin.get(), layout) };
     }
 }

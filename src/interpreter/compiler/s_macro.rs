@@ -21,8 +21,8 @@ use crate::ast::{AstList, AstNode, AstSymbol, CoreSymbol};
 use crate::interpreter::vm::{Statement, StatementType};
 
 use super::{
-    compile_one, CompilerAction, CompilerError, CompilerState, CompilerType,
-    error::AstCastErrorImpl, LambdaBuilder, LetDef, PartialFunction,
+    compile_one, error::AstCastErrorImpl, CompilerAction, CompilerError, CompilerState,
+    CompilerType, LambdaBuilder, LetDef, PartialFunction,
 };
 
 #[derive(Clone, Debug)]

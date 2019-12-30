@@ -21,7 +21,7 @@ use crate::ast::{AstNode, AstSymbol, CoreSymbol};
 use crate::interpreter::vm::{Statement, StatementType};
 
 use super::{
-    BuiltinMacro, compile_one, CompilerAction, CompilerError, CompilerState, PartialFunction,
+    compile_one, BuiltinMacro, CompilerAction, CompilerError, CompilerState, PartialFunction,
 };
 
 #[derive(Clone, Debug)]

@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::mem;
 use std::ptr;
 use std::slice;
@@ -9,7 +10,7 @@ use crate::gc::{GcHeap, GcObj, GcObjHead, GcVtable, Traceable};
 struct LargeObject(usize);
 
 unsafe impl Traceable for LargeObject {
-    fn size(&mut self) -> usize {
+    fn extra_size(&self) -> usize {
         self.0
     }
 
@@ -34,21 +35,25 @@ unsafe impl Traceable for TestGcLeaf {
 }
 
 struct GcContainer {
-    one: *mut GcObj<TestGcLeaf>,
-    two: *mut GcObj<TestGcLeaf>,
-    three: *mut GcObj<TestGcLeaf>,
+    one: Cell<*const GcObj<TestGcLeaf>>,
+    two: Cell<*const GcObj<TestGcLeaf>>,
+    three: Cell<*const GcObj<TestGcLeaf>>,
 }
 
 unsafe impl Traceable for GcContainer {
-    fn for_each_pointer<T>(&mut self, mut fun: T)
-        where
-            T: FnMut(&mut *mut GcObjHead),
+    unsafe fn for_each_pointer<T>(&self, mut fun: T)
+    where
+        T: FnMut(*const GcObjHead) -> *const GcObjHead,
     {
-        unsafe {
-            fun(&mut *(&mut self.one as *mut _ as *mut *mut GcObjHead));
-            fun(&mut *(&mut self.two as *mut _ as *mut *mut GcObjHead));
-            fun(&mut *(&mut self.three as *mut _ as *mut *mut GcObjHead));
-        }
+        self.one.set(GcObjHead::downcast_ptr::<TestGcLeaf>(fun(
+            GcObj::erase_ptr(self.one.get()),
+        )));
+        self.two.set(GcObjHead::downcast_ptr::<TestGcLeaf>(fun(
+            GcObj::erase_ptr(self.two.get()),
+        )));
+        self.three.set(GcObjHead::downcast_ptr::<TestGcLeaf>(fun(
+            GcObj::erase_ptr(self.three.get()),
+        )));
     }
 
     fn get_vtable() -> &'static GcVtable {
@@ -73,15 +78,17 @@ fn main_test() {
         assert_eq!((*obj3.to_ptr()).inner, TestGcLeaf(2));
         drop(
             gc.put_on_heap(LargeObject(
-                1024 * 400 - mem::size_of::<GcObj<TestGcLeaf>>() * 3,
+                1024 * 400
+                    - mem::size_of::<GcObj<TestGcLeaf>>() * 3
+                    - mem::size_of::<GcObj<LargeObject>>(),
             ))
-                .unwrap(),
+            .unwrap(),
         );
         let container = gc
             .put_on_heap(GcContainer {
-                one: obj1.to_ptr(),
-                two: obj2.to_ptr(),
-                three: obj3.to_ptr(),
+                one: Cell::new(obj1.to_ptr()),
+                two: Cell::new(obj2.to_ptr()),
+                three: Cell::new(obj3.to_ptr()),
             })
             .unwrap();
         drop(obj1);
@@ -90,10 +97,10 @@ fn main_test() {
         for _ in 0..50 {
             drop(gc.put_on_heap(LargeObject(1024 * 300)))
         }
-        let container_ref = &(*container.to_ptr()).inner;
-        assert_eq!((*container_ref.one).inner, TestGcLeaf(0));
-        assert_eq!((*container_ref.two).inner, TestGcLeaf(1));
-        assert_eq!((*container_ref.three).inner, TestGcLeaf(2));
+        let container_ref = &(container.to_ref()).inner;
+        assert_eq!((*container_ref.one.get()).inner, TestGcLeaf(0));
+        assert_eq!((*container_ref.two.get()).inner, TestGcLeaf(1));
+        assert_eq!((*container_ref.three.get()).inner, TestGcLeaf(2));
     }
 }
 
@@ -111,31 +118,46 @@ struct DynamicSizedHead {
 }
 
 impl DynamicSizedHead {
-    unsafe fn leafs_mut(&mut self) -> &mut [*mut GcObj<TestGcLeaf>] {
-        slice::from_raw_parts_mut(
-            (self as *mut _ as *mut u8)
+    unsafe fn leafs_ref(&self) -> &[Cell<*const GcObj<TestGcLeaf>>] {
+        slice::from_raw_parts(
+            (self as *const _ as *const u8)
                 .add(mem::size_of::<DynamicSizedHead>())
-                .cast::<*mut GcObj<TestGcLeaf>>(),
+                .cast::<Cell<*const GcObj<TestGcLeaf>>>(),
             self.size,
         )
     }
 }
 
 unsafe impl Traceable for DynamicSizedHead {
-    fn for_each_pointer<T>(&mut self, mut fun: T)
-        where
-            T: FnMut(&mut *mut GcObjHead),
+    unsafe fn for_each_pointer<T>(&self, mut fun: T)
+    where
+        T: FnMut(*const GcObjHead) -> *const GcObjHead,
     {
-        for leaf in unsafe { self.leafs_mut() }.iter_mut().take_while(|leaf| !leaf.is_null()) {
-            unsafe {
-                fun(&mut *(leaf as *mut _ as *mut *mut GcObjHead));
-            }
+        for leaf in self
+            .leafs_ref()
+            .iter()
+            .take_while(|leaf| !leaf.get().is_null())
+        {
+            leaf.set(GcObjHead::downcast_ptr::<TestGcLeaf>(fun(
+                GcObj::erase_ptr(leaf.get()),
+            )))
         }
     }
 
-    fn size(&mut self) -> usize {
-        let base_size = mem::size_of::<GcObj<DynamicSizedHead>>();
-        base_size + mem::size_of::<usize>() * self.size
+    fn extra_size(&self) -> usize {
+        mem::size_of::<*const GcObj<TestGcLeaf>>() * self.size
+    }
+
+    fn init_extra(&mut self) {
+        unsafe {
+            let child_ptr = (self as *mut _ as *mut u8)
+                .add(mem::size_of::<DynamicSizedHead>())
+                .cast::<*const GcObj<TestGcLeaf>>();
+
+            for x in 0..self.size {
+                ptr::write(child_ptr.add(x), ptr::null())
+            }
+        }
     }
 
     fn get_vtable() -> &'static GcVtable {
@@ -152,30 +174,23 @@ fn dynamic_sized() {
         let gc = GcHeap::new(1024 * 40, 10);
         let _zero_children = gc.put_on_heap(DynamicSizedHead { size: 0 }).unwrap();
         //Induce collection during child allocation
-        drop(gc.put_on_heap(LargeObject(1024 * 40 - mem::size_of::<DynamicSizedHead>() * 2 - mem::size_of::<usize>() * 1090)));
+        drop(gc.put_on_heap(LargeObject(
+            1024 * 40 - mem::size_of::<DynamicSizedHead>() * 2 - mem::size_of::<usize>() * 1090,
+        )));
 
         let many_children = gc.put_on_heap(DynamicSizedHead { size: 1024 }).unwrap();
 
-        let children_ptr = (&mut (*many_children.to_ptr()).inner as *mut _ as *mut u8)
-            .add(mem::size_of::<DynamicSizedHead>())
-            .cast::<*mut GcObj<TestGcLeaf>>();
         for x in 0..1024 {
-            ptr::write(
-                children_ptr.add(x),
-                ptr::null_mut(),
-            )
-        }
-
-        for x in 0..1024 {
-            (*many_children.to_ptr()).inner.leafs_mut()[x] = gc.put_on_heap(TestGcLeaf(x as u8)).unwrap().to_ptr();
+            let child = gc.put_on_heap(TestGcLeaf(x as u8)).unwrap();
+            many_children.to_ref().inner.leafs_ref()[x].set(child.to_ptr());
         }
 
         for _ in 0..50 {
             drop(gc.put_on_heap(LargeObject(1024 * 3)).unwrap())
         }
 
-        for (i, leaf) in (*many_children.to_ptr()).inner.leafs_mut().iter().enumerate() {
-            assert_eq!(i as u8, (**leaf).inner.0)
+        for (i, leaf) in many_children.to_ref().inner.leafs_ref().iter().enumerate() {
+            assert_eq!(i as u8, (*leaf.get()).inner.0)
         }
     }
 }

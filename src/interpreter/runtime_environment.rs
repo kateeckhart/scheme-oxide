@@ -26,7 +26,7 @@ use crate::parser::Parser;
 use crate::types::*;
 
 use super::{
-    BuiltinFunction, compiler::EnvironmentFrame, compiler::parse_define, eval_with_environment,
+    compiler::parse_define, compiler::EnvironmentFrame, eval_with_environment, BuiltinFunction,
     FunctionRef, FunctionRefInner, RuntimeError,
 };
 
